@@ -43,13 +43,13 @@ class AIAssistant:
         "anthropic/claude-haiku-4.5",
     ]
 
-    def __init__(self, api_key=None, model="anthropic/claude-sonnet-4.5"):
+    def __init__(self, api_key=None, model="qwen/qwen3-coder-plus"):
         """
         Initialize the AI Assistant.
 
         Args:
             api_key (str): OpenRouter API key
-            model (str): Model to use (default: anthropic/claude-sonnet-4.5)
+            model (str): Model to use (default: qwen/qwen3-coder-plus)
         """
         self.client = OpenAI(
             api_key=api_key or os.getenv("OPENROUTER_API_KEY"),

@@ -1,1 +1,300 @@
-[['anthropic/claude-sonnet-4.5', 'qwen/qwen3-coder-plus', 'qwen/qwen3-coder', 'qwen/qwen3-coder-flash', 'anthropic/claude-haiku-4.5'], [], ['dict[str, str]] = [\n            {\n                "role": "system', 'content": "', 'You are a helpful AI assistant that can read and write files.\n\n                When working with files, be efficient and selective:\n                - Use list_files to explore directory structure before reading specific files\n                - Only read files that are directly relevant to the user\'s request\n                - Avoid reading multiple files when one or two will suffice to answer the question\n                - When listing files, use patterns to filter results and avoid overwhelming output\n                - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything\n                - Ask yourself: "Do I really need to read this file to answer the user\'s question?"\n                "', ',\n            }\n        ]\n\n    def switch_model(self):\n        "', 'Allow user to switch between available models"', '\n        try:\n            new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)\n            if new_model and new_model != self.model:\n                self.model = new_model\n                # Reset chat history when switching models\n                self.chat_history = [\n                    {\n                        "role": "system', 'content": "', 'You are a helpful AI assistant that can read and write files.\n\n                        When working with files, be efficient and selective:\n                        - Use list_files to explore directory structure before reading specific files\n                        - Only read files that are directly relevant to the user\'s request\n                        - Avoid reading multiple files when one or two will suffice to answer the question\n                        - When listing files, use patterns to filter results and avoid overwhelming output\n                        - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything\n                        - Ask yourself: "Do I really need to read this file to answer the user\'s question?"\n                        "', ',\n                    }\n                ]\n                self.ui.show_info(f"✓ Switched to model: {self.model}")\n        except KeyboardInterrupt:\n            # User cancelled model selection\n            self.ui.show_info("Model selection cancelled")\n\n    def format_modified_files(self):\n        "', 'Run ruff format on all modified Python files"', '\n        # Filter to only Python files\n        python_files = [f for f in self.modified_files if f.endswith(\'.py\')]\n        if not python_files:\n            return\n\n        try:\n            for file_path in python_files:\n                # Run ruff format on the file\n                result = subprocess.run(\n                    [\'ruff\', \'format\', file_path],\n                    capture_output=True,\n                    text=True\n                )\n                if result.returncode == 0:\n                    self.ui.show_info(f"✓ Formatted {file_path} with ruff")\n                else:\n                    self.ui.show_warning(f"⚠️  Failed to format {file_path}: {result.stderr}")\n        except FileNotFoundError:\n            self.ui.show_warning("⚠️  ruff not found. Please install it with: pip install ruff")\n        except Exception as e:\n            self.ui.show_error(f"Error running ruff format: {str(e)}")\n        \n        # Clear the modified files set after formatting\n        self.modified_files.clear()\n\n    def run_loop(self):\n        "', '\n        Run the interactive loop where user can type inputs and get AI responses.\n        Files referenced with @ will be inserted into the prompt before sending to AI.\n        "', '\n        self.ui.show_welcome()\n        self.ui.show_model_info(self.model)\n\n        while True:\n            try:\n                self.ui.show_separator()\n\n                user_input = self.ui.get_user_input()\n\n                # Handle model switching command\n                if user_input.strip().lower() == "/model":\n                    self.switch_model()\n                    self.ui.show_model_info(self.model)\n                    continue\n\n                if len(user_input) < 4:\n                    self.ui.show_info(', 'Input too short, please try again")\n                    continue\n\n                if user_input.lower() in ["quit', 'exit', 'q'], {'role': 'user', 'content': 'processed_input'}, [-1], ['role'], {'role': 'assistant', 'content': 'response'}, {'unknown': ''}, ['diff'], ['diff'], ['diff'], ['diff'], [0], [], {'tool_call_id': 'tool_call.id', 'role': 'tool', 'name': 'tool_call.function.name', 'content': 'result'}]
+from __future__ import annotations
+import os
+import json
+from openai import OpenAI
+
+# Import our custom tools
+from file_editing3 import FileEditor
+from file_reader import FileReader
+from file_writer import FileWriter
+from file_inserter import FileInserter
+from file_lister import FileLister
+from UI import AssistantUI
+
+
+class UserInterruptException(Exception):
+    """Exception raised when user interrupts the agent loop"""
+
+    pass
+
+
+class AIAssistant:
+    # Available models
+    AVAILABLE_MODELS = [
+        "anthropic/claude-sonnet-4.5",
+        "qwen/qwen3-coder-flash",
+        "anthropic/claude-haiku-4.5",
+    ]
+
+    def __init__(self, api_key=None, model="anthropic/claude-sonnet-4.5"):
+        """
+        Initialize the AI Assistant.
+
+        Args:
+            api_key (str): OpenRouter API key
+            model (str): Model to use (default: anthropic/claude-sonnet-4.5)
+        """
+        self.client = OpenAI(
+            api_key=api_key or os.getenv("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1",
+        )
+        self.model = model
+        self.ui = AssistantUI()
+
+        # Initialize our tools
+        self.file_editor = FileEditor()
+        self.file_reader = FileReader()
+        self.file_writer = FileWriter()
+        self.file_inserter = FileInserter(self.file_reader)
+        self.file_lister = FileLister()
+
+        # Collect all tools
+        self.tools = []
+        self.tools.append(self.file_reader.get_tools())
+        self.tools.append(self.file_writer.get_tools())
+        self.tools.extend(self.file_editor.get_tools())
+        self.tools.append(self.file_lister.get_tools())
+        # self.tools.extend(self.file_inserter.get_tools())
+        self.chat_history: list[dict[str, str]] = [
+            {
+                "role": "system",
+                "content": """You are a helpful AI assistant that can read and write files.
+
+When working with files, be efficient and selective:
+- Use list_files to explore directory structure before reading specific files
+- Only read files that are directly relevant to the user's request
+- Avoid reading multiple files when one or two will suffice to answer the question
+- When listing files, use patterns to filter results and avoid overwhelming output
+- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+- Ask yourself: "Do I really need to read this file to answer the user's question?"
+""",
+            }
+        ]
+
+    def switch_model(self):
+        """Allow user to switch between available models"""
+        try:
+            new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)
+            if new_model and new_model != self.model:
+                self.model = new_model
+                # Reset chat history when switching models
+                self.chat_history = [
+                    {
+                        "role": "system",
+                        "content": """You are a helpful AI assistant that can read and write files.
+
+When working with files, be efficient and selective:
+- Use list_files to explore directory structure before reading specific files
+- Only read files that are directly relevant to the user's request
+- Avoid reading multiple files when one or two will suffice to answer the question
+- When listing files, use patterns to filter results and avoid overwhelming output
+- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+- Ask yourself: "Do I really need to read this file to answer the user's question?"
+""",
+                    }
+                ]
+                self.ui.show_info(f"✓ Switched to model: {self.model}")
+        except KeyboardInterrupt:
+            # User cancelled model selection
+            self.ui.show_info("Model selection cancelled")
+
+    def run_loop(self):
+        """
+        Run the interactive loop where user can type inputs and get AI responses.
+        Files referenced with @ will be inserted into the prompt before sending to AI.
+        """
+        self.ui.show_welcome()
+        self.ui.show_model_info(self.model)
+
+        while True:
+            try:
+                self.ui.show_separator()
+
+                user_input = self.ui.get_user_input()
+
+                # Handle model switching command
+                if user_input.strip().lower() == "/model":
+                    self.switch_model()
+                    self.ui.show_model_info(self.model)
+                    continue
+
+                if len(user_input) < 4:
+                    self.ui.show_info("Input too short, please try again")
+                    continue
+
+                if user_input.lower() in ["quit", "exit", "q"]:
+                    self.ui.show_goodbye()
+                    break
+
+                if not user_input.strip():
+                    continue
+
+                # Show user message
+
+                # Process the input to insert file contents
+                processed_input = self.file_inserter.insert_file_content(user_input)
+
+                # Add user message to chat history
+                self.chat_history.append({"role": "user", "content": processed_input})
+
+                # Get AI response (no thinking indicator here - it's inside get_ai_response)
+                try:
+                    response = self.get_ai_response(processed_input)
+                except UserInterruptException:
+                    self.ui.show_info(
+                        "⚠️  Agent loop interrupted by user. Returning to input."
+                    )
+                    # Remove the last user message since we didn't complete the response
+                    if self.chat_history and self.chat_history[-1]["role"] == "user":
+                        self.chat_history.pop()
+                    continue
+
+                # Add AI response to chat history
+                self.chat_history.append({"role": "assistant", "content": response})
+
+                # Show AI response
+                self.ui.show_ai_message(response)
+
+            except KeyboardInterrupt:
+                self.ui.show_goodbye()
+                break
+            except Exception as e:
+                self.ui.show_error(str(e))
+
+    def execute_tool_call(self, tool_call):
+        """
+        Execute a single tool call and return the result.
+
+        Args:
+            tool_call: The tool call object from the API response
+
+        Returns:
+            str: Result message from the tool execution
+        """
+        # Show which tool is being called
+        self.ui.show_tool_call(tool_call.function.name)
+
+        result = None
+        # Use json.loads instead of eval for safety and proper boolean parsing
+        args = json.loads(tool_call.function.arguments)
+
+        if tool_call.function.name == "read_file":
+            result = self.file_reader.read_file(**args)
+            # Show only that file was read, not the full content
+            display_result = (
+                f"Successfully read file: {args.get('file_path', 'unknown')}"
+            )
+            self.ui.show_tool_result(display_result)
+        elif tool_call.function.name == "write_file":
+            result = self.file_writer.write_file(**args)
+            self.ui.show_tool_result(result)
+        elif tool_call.function.name == "edit_file":
+            result = self.file_editor.edit_file(**args)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
+            else:
+                self.ui.show_tool_result(result)
+        elif tool_call.function.name == "insert_line":
+            result = self.file_editor.insert_line(**args)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
+            else:
+                self.ui.show_tool_result(result)
+        elif tool_call.function.name == "remove_line":
+            result = self.file_editor.remove_line(**args)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
+            else:
+                self.ui.show_tool_result(result)
+        elif tool_call.function.name == "change_line":
+            result = self.file_editor.change_line(**args)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
+            else:
+                self.ui.show_tool_result(result)
+        elif tool_call.function.name == "list_files":
+            result = self.file_lister.list_files(**args)
+            self.ui.show_tool_result(result)
+
+        return result if result else "Operation completed"
+
+    def get_ai_response(self, prompt):
+        """
+        Get response from OpenRouter AI model.
+        Continues in a loop executing tools until AI provides a final text response.
+
+        Args:
+            prompt (str): Prompt to send to the AI
+
+        Returns:
+            str: AI response text
+
+        Raises:
+            UserInterruptException: If user presses Ctrl+C during agent loop
+        """
+        # Keep looping until we get a response without tool calls
+        while True:
+            try:
+                # Show thinking indicator only during API call
+                with self.ui.show_thinking():
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=self.chat_history,
+                        tools=self.tools,
+                        tool_choice="auto",
+                    )
+
+                ai_message = response.choices[0].message
+
+                # If no tool calls, we're done - return the text response
+                if not ai_message.tool_calls:
+                    return (
+                        ai_message.content if ai_message.content else "Task completed."
+                    )
+
+                # Execute all tool calls (thinking indicator is OFF during tool execution)
+                tool_results = []
+                for tool_call in ai_message.tool_calls:
+                    result = self.execute_tool_call(tool_call)
+
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": tool_call.function.name,
+                            "content": result,
+                        }
+                    )
+
+                # Add assistant message and tool results to chat history
+                self.chat_history.append(ai_message)
+                self.chat_history.extend(tool_results)
+
+                # Loop continues - will make another API call with updated history
+
+            except KeyboardInterrupt:
+                # User pressed Ctrl+C during the agent loop
+                raise UserInterruptException("User interrupted agent loop")
+
+
+from dotenv import load_dotenv
+
+load_dotenv()
+agent = AIAssistant()
+agent.run_loop()

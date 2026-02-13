@@ -1,57 +1,10 @@
 import os
-import pathspec
 
 
 class FileLister:
     def __init__(self):
         """Initialize the FileLister."""
         pass
-
-    def _load_gitignore(self, directory):
-        """
-        Load .gitignore patterns from the directory and parent directories.
-        
-        Args:
-            directory (str): Directory to start looking for .gitignore
-            
-        Returns:
-            pathspec.PathSpec: Compiled gitignore patterns
-        """
-        patterns = []
-        current_dir = os.path.abspath(directory)
-        
-        # Walk up the directory tree looking for .gitignore files
-        while True:
-            gitignore_path = os.path.join(current_dir, '.gitignore')
-            if os.path.exists(gitignore_path):
-                try:
-                    with open(gitignore_path, 'r') as f:
-                        for line in f:
-                            line = line.strip()
-                            # Skip empty lines and comments
-                            if line and not line.startswith('#'):
-                                patterns.append(line)
-                except Exception:
-                    pass  # Ignore errors reading .gitignore
-            
-            # Stop at root directory
-            parent = os.path.dirname(current_dir)
-            if parent == current_dir:
-                break
-            current_dir = parent
-        
-        # Always ignore common patterns
-        patterns.extend([
-            '.git/',
-            '__pycache__/',
-            '*.pyc',
-            '*.pyo',
-            '*.pyd',
-            '.DS_Store',
-            'Thumbs.db',
-        ])
-        
-        return pathspec.PathSpec.from_lines('gitwildmatch', patterns)
 
     def list_files(
         self, directory=".", pattern=None, recursive=False, show_hidden=False
@@ -75,75 +28,41 @@ class FileLister:
             if not os.path.isdir(directory):
                 return f"Error: '{directory}' is not a directory"
 
-            # Load gitignore patterns
-            gitignore_spec = self._load_gitignore(directory)
-
             files_list = []
             dirs_list = []
 
             if recursive:
                 # Walk through directory tree
                 for root, dirs, files in os.walk(directory):
-                    # Get relative path from the base directory
-                    rel_root = os.path.relpath(root, directory)
-                    if rel_root == '.':
-                        rel_root = ''
-                    
-                    # Filter directories based on gitignore and hidden status
-                    filtered_dirs = []
-                    for d in dirs:
-                        rel_path = os.path.join(rel_root, d) if rel_root else d
-                        
-                        # Skip hidden directories if needed
-                        if not show_hidden and d.startswith("."):
-                            continue
-                        
-                        # Skip gitignored directories
-                        if gitignore_spec.match_file(rel_path + '/'):
-                            continue
-                        
-                        filtered_dirs.append(d)
-                        dirs_list.append(rel_path)
-                    
-                    # Update dirs in-place to control os.walk recursion
-                    dirs[:] = filtered_dirs
-                    
-                    # Filter files
-                    for file in files:
-                        rel_path = os.path.join(rel_root, file) if rel_root else file
-                        
-                        # Skip hidden files if needed
-                        if not show_hidden and file.startswith("."):
-                            continue
-                        
-                        # Skip gitignored files
-                        if gitignore_spec.match_file(rel_path):
-                            continue
-                        
-                        # Apply pattern filter if specified
-                        if pattern and not self._match_pattern(file, pattern):
-                            continue
+                    # Filter hidden directories if needed
+                    if not show_hidden:
+                        dirs[:] = [d for d in dirs if not d.startswith(".")]
+                        files = [f for f in files if not f.startswith(".")]
 
+                    # Apply pattern filter if specified
+                    if pattern:
+                        files = [f for f in files if self._match_pattern(f, pattern)]
+
+                    for file in files:
+                        rel_path = os.path.relpath(os.path.join(root, file), directory)
                         file_size = os.path.getsize(os.path.join(root, file))
                         files_list.append((rel_path, file_size))
+
+                    for dir_name in dirs:
+                        rel_path = os.path.relpath(
+                            os.path.join(root, dir_name), directory
+                        )
+                        dirs_list.append(rel_path)
             else:
                 # List only direct contents
                 items = os.listdir(directory)
 
+                # Filter hidden items if needed
+                if not show_hidden:
+                    items = [item for item in items if not item.startswith(".")]
+
                 for item in items:
                     full_path = os.path.join(directory, item)
-                    
-                    # Skip hidden items if needed
-                    if not show_hidden and item.startswith("."):
-                        continue
-                    
-                    # Skip gitignored items
-                    if os.path.isdir(full_path):
-                        if gitignore_spec.match_file(item + '/'):
-                            continue
-                    else:
-                        if gitignore_spec.match_file(item):
-                            continue
 
                     if os.path.isdir(full_path):
                         dirs_list.append(item)

@@ -21,16 +21,16 @@ class FileEditor:
         """
         old_lines = old_content.splitlines(keepends=True)
         new_lines = new_content.splitlines(keepends=True)
-        
+
         diff = difflib.unified_diff(
             old_lines,
             new_lines,
             fromfile=f"a/{file_path}",
             tofile=f"b/{file_path}",
-            lineterm=''
+            lineterm="",
         )
-        
-        return ''.join(diff)
+
+        return "".join(diff)
 
     def edit_file(self, file_path, content, mode="w"):
         """
@@ -50,7 +50,7 @@ class FileEditor:
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as file:
                     old_content = file.read()
-            
+
             # Create directories if they don't exist
             dir_path = os.path.dirname(file_path)
             if dir_path:
@@ -65,20 +65,20 @@ class FileEditor:
             # Write the file
             with open(file_path, mode, encoding="utf-8") as file:
                 file.write(content)
-            
+
             # Generate diff
             diff = self._generate_diff(old_content, new_content, file_path)
-            
+
             return {
                 "message": f"Successfully edited {file_path}",
                 "diff": diff,
-                "success": True
+                "success": True,
             }
         except Exception as e:
             return {
                 "message": f"Error editing file: {str(e)}",
                 "diff": "",
-                "success": False
+                "success": False,
             }
 
     def read_file(self, file_path):
@@ -126,12 +126,8 @@ class FileEditor:
             # Read all lines from the file
             old_content = self.read_file(file_path)
             if old_content.startswith("Error"):
-                return {
-                    "message": old_content,
-                    "diff": "",
-                    "success": False
-                }
-            
+                return {"message": old_content, "diff": "", "success": False}
+
             lines = old_content.splitlines(keepends=True)
 
             # Ensure line_number is valid
@@ -147,20 +143,20 @@ class FileEditor:
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(new_content)
-            
+
             # Generate diff
             diff = self._generate_diff(old_content, new_content, file_path)
-            
+
             return {
                 "message": f"Successfully inserted line at {line_number} in {file_path}",
                 "diff": diff,
-                "success": True
+                "success": True,
             }
         except Exception as e:
             return {
                 "message": f"Error inserting line: {str(e)}",
                 "diff": "",
-                "success": False
+                "success": False,
             }
 
     def remove_line(self, file_path, line_number):
@@ -178,12 +174,8 @@ class FileEditor:
             # Read all lines from the file
             old_content = self.read_file(file_path)
             if old_content.startswith("Error"):
-                return {
-                    "message": old_content,
-                    "diff": "",
-                    "success": False
-                }
-            
+                return {"message": old_content, "diff": "", "success": False}
+
             lines = old_content.splitlines(keepends=True)
 
             # Check if line_number is valid
@@ -191,7 +183,7 @@ class FileEditor:
                 return {
                     "message": f"Error: Line number {line_number} is out of range",
                     "diff": "",
-                    "success": False
+                    "success": False,
                 }
 
             # Remove the line
@@ -201,20 +193,20 @@ class FileEditor:
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(new_content)
-            
+
             # Generate diff
             diff = self._generate_diff(old_content, new_content, file_path)
-            
+
             return {
                 "message": f"Successfully removed line {line_number} from {file_path}",
                 "diff": diff,
-                "success": True
+                "success": True,
             }
         except Exception as e:
             return {
                 "message": f"Error removing line: {str(e)}",
                 "diff": "",
-                "success": False
+                "success": False,
             }
 
     def change_line(self, file_path, line_number, new_content):
@@ -233,12 +225,8 @@ class FileEditor:
             # Read all lines from the file
             old_content = self.read_file(file_path)
             if old_content.startswith("Error"):
-                return {
-                    "message": old_content,
-                    "diff": "",
-                    "success": False
-                }
-            
+                return {"message": old_content, "diff": "", "success": False}
+
             lines = old_content.splitlines(keepends=True)
 
             # Check if line_number is valid
@@ -246,7 +234,7 @@ class FileEditor:
                 return {
                     "message": f"Error: Line number {line_number} is out of range",
                     "diff": "",
-                    "success": False
+                    "success": False,
                 }
 
             # Change the line
@@ -256,20 +244,20 @@ class FileEditor:
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(new_content_full)
-            
+
             # Generate diff
             diff = self._generate_diff(old_content, new_content_full, file_path)
-            
+
             return {
                 "message": f"Successfully changed line {line_number} in {file_path}",
                 "diff": diff,
-                "success": True
+                "success": True,
             }
         except Exception as e:
             return {
                 "message": f"Error changing line: {str(e)}",
                 "diff": "",
-                "success": False
+                "success": False,
             }
 
     def get_tools(self):
@@ -390,10 +378,10 @@ if __name__ == "__main__":
 
     # Create a test file
     result = editor.edit_file("example.txt", "Line 1\nLine 2\nLine 3\nLine 4")
-    print(result['message'])
-    if result['diff']:
+    print(result["message"])
+    if result["diff"]:
         print("Diff:")
-        print(result['diff'])
+        print(result["diff"])
 
     # Show initial content
     content = editor.read_file("example.txt")
@@ -401,10 +389,10 @@ if __name__ == "__main__":
 
     # Insert a line at position 2
     result = editor.insert_line("example.txt", 2, "Inserted line")
-    print(result['message'])
-    if result['diff']:
+    print(result["message"])
+    if result["diff"]:
         print("Diff:")
-        print(result['diff'])
+        print(result["diff"])
 
     # Show content after insertion
     content = editor.read_file("example.txt")
@@ -412,10 +400,10 @@ if __name__ == "__main__":
 
     # Change line 1 (0-indexed)
     result = editor.change_line("example.txt", 1, "Changed line")
-    print(result['message'])
-    if result['diff']:
+    print(result["message"])
+    if result["diff"]:
         print("Diff:")
-        print(result['diff'])
+        print(result["diff"])
 
     # Show content after changing
     content = editor.read_file("example.txt")
@@ -423,10 +411,10 @@ if __name__ == "__main__":
 
     # Remove line 0
     result = editor.remove_line("example.txt", 0)
-    print(result['message'])
-    if result['diff']:
+    print(result["message"])
+    if result["diff"]:
         print("Diff:")
-        print(result['diff'])
+        print(result["diff"])
 
     # Show final content
     content = editor.read_file("example.txt")

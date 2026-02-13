@@ -94,4 +94,3 @@ class FileEditor:
         # This would require storing the original content or using git
         # For now, we'll show what was changed via a simple approach
         return "Diff generation requires additional implementation for precise line tracking."
-

@@ -14,6 +14,7 @@ from UI import AssistantUI
 
 class UserInterruptException(Exception):
     """Exception raised when user interrupts the agent loop"""
+
     pass
 
 
@@ -22,9 +23,9 @@ class AIAssistant:
     AVAILABLE_MODELS = [
         "anthropic/claude-sonnet-4.5",
         "qwen/qwen3-coder-flash",
-        "anthropic/claude-haiku-4.5"
+        "anthropic/claude-haiku-4.5",
     ]
-    
+
     def __init__(self, api_key=None, model="anthropic/claude-sonnet-4.5"):
         """
         Initialize the AI Assistant.
@@ -57,7 +58,16 @@ class AIAssistant:
         self.chat_history: list[dict[str, str]] = [
             {
                 "role": "system",
-                "content": "You are a helpful AI assistant that can read and write files.",
+                "content": """You are a helpful AI assistant that can read and write files.
+
+When working with files, be efficient and selective:
+- Use list_files to explore directory structure before reading specific files
+- Only read files that are directly relevant to the user's request
+- Avoid reading multiple files when one or two will suffice to answer the question
+- When listing files, use patterns to filter results and avoid overwhelming output
+- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+- Ask yourself: "Do I really need to read this file to answer the user's question?"
+""",
             }
         ]
 
@@ -71,7 +81,16 @@ class AIAssistant:
                 self.chat_history = [
                     {
                         "role": "system",
-                        "content": "You are a helpful AI assistant that can read and write files.",
+                        "content": """You are a helpful AI assistant that can read and write files.
+
+When working with files, be efficient and selective:
+- Use list_files to explore directory structure before reading specific files
+- Only read files that are directly relevant to the user's request
+- Avoid reading multiple files when one or two will suffice to answer the question
+- When listing files, use patterns to filter results and avoid overwhelming output
+- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+- Ask yourself: "Do I really need to read this file to answer the user's question?"
+""",
                     }
                 ]
                 self.ui.show_info(f"✓ Switched to model: {self.model}")
@@ -90,15 +109,15 @@ class AIAssistant:
         while True:
             try:
                 self.ui.show_separator()
-                
+
                 user_input = self.ui.get_user_input()
-                
+
                 # Handle model switching command
                 if user_input.strip().lower() == "/model":
                     self.switch_model()
                     self.ui.show_model_info(self.model)
                     continue
-                
+
                 if len(user_input) < 4:
                     self.ui.show_info("Input too short, please try again")
                     continue
@@ -111,11 +130,10 @@ class AIAssistant:
                     continue
 
                 # Show user message
-                self.ui.show_user_message(user_input)
 
                 # Process the input to insert file contents
                 processed_input = self.file_inserter.insert_file_content(user_input)
-                
+
                 # Add user message to chat history
                 self.chat_history.append({"role": "user", "content": processed_input})
 
@@ -123,12 +141,14 @@ class AIAssistant:
                 try:
                     response = self.get_ai_response(processed_input)
                 except UserInterruptException:
-                    self.ui.show_info("⚠️  Agent loop interrupted by user. Returning to input.")
+                    self.ui.show_info(
+                        "⚠️  Agent loop interrupted by user. Returning to input."
+                    )
                     # Remove the last user message since we didn't complete the response
                     if self.chat_history and self.chat_history[-1]["role"] == "user":
                         self.chat_history.pop()
                     continue
-                
+
                 # Add AI response to chat history
                 self.chat_history.append({"role": "assistant", "content": response})
 
@@ -144,24 +164,26 @@ class AIAssistant:
     def execute_tool_call(self, tool_call):
         """
         Execute a single tool call and return the result.
-        
+
         Args:
             tool_call: The tool call object from the API response
-            
+
         Returns:
             str: Result message from the tool execution
         """
         # Show which tool is being called
         self.ui.show_tool_call(tool_call.function.name)
-        
+
         result = None
         # Use json.loads instead of eval for safety and proper boolean parsing
         args = json.loads(tool_call.function.arguments)
-        
+
         if tool_call.function.name == "read_file":
             result = self.file_reader.read_file(**args)
             # Show only that file was read, not the full content
-            display_result = f"Successfully read file: {args.get('file_path', 'unknown')}"
+            display_result = (
+                f"Successfully read file: {args.get('file_path', 'unknown')}"
+            )
             self.ui.show_tool_result(display_result)
         elif tool_call.function.name == "write_file":
             result = self.file_writer.write_file(**args)
@@ -170,46 +192,46 @@ class AIAssistant:
             result = self.file_editor.edit_file(**args)
             # Handle dict result with diff
             if isinstance(result, dict):
-                self.ui.show_tool_result(result.get('message', 'Operation completed'))
-                if result.get('diff'):
-                    self.ui.show_diff(result['diff'], max_lines=10)
-                result = result.get('message', 'Operation completed')
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
             else:
                 self.ui.show_tool_result(result)
         elif tool_call.function.name == "insert_line":
             result = self.file_editor.insert_line(**args)
             # Handle dict result with diff
             if isinstance(result, dict):
-                self.ui.show_tool_result(result.get('message', 'Operation completed'))
-                if result.get('diff'):
-                    self.ui.show_diff(result['diff'], max_lines=10)
-                result = result.get('message', 'Operation completed')
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
             else:
                 self.ui.show_tool_result(result)
         elif tool_call.function.name == "remove_line":
             result = self.file_editor.remove_line(**args)
             # Handle dict result with diff
             if isinstance(result, dict):
-                self.ui.show_tool_result(result.get('message', 'Operation completed'))
-                if result.get('diff'):
-                    self.ui.show_diff(result['diff'], max_lines=10)
-                result = result.get('message', 'Operation completed')
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
             else:
                 self.ui.show_tool_result(result)
         elif tool_call.function.name == "change_line":
             result = self.file_editor.change_line(**args)
             # Handle dict result with diff
             if isinstance(result, dict):
-                self.ui.show_tool_result(result.get('message', 'Operation completed'))
-                if result.get('diff'):
-                    self.ui.show_diff(result['diff'], max_lines=10)
-                result = result.get('message', 'Operation completed')
+                self.ui.show_tool_result(result.get("message", "Operation completed"))
+                if result.get("diff"):
+                    self.ui.show_diff(result["diff"], max_lines=10)
+                result = result.get("message", "Operation completed")
             else:
                 self.ui.show_tool_result(result)
         elif tool_call.function.name == "list_files":
             result = self.file_lister.list_files(**args)
             self.ui.show_tool_result(result)
-        
+
         return result if result else "Operation completed"
 
     def get_ai_response(self, prompt):
@@ -222,7 +244,7 @@ class AIAssistant:
 
         Returns:
             str: AI response text
-            
+
         Raises:
             UserInterruptException: If user presses Ctrl+C during agent loop
         """
@@ -237,18 +259,20 @@ class AIAssistant:
                         tools=self.tools,
                         tool_choice="auto",
                     )
-                
+
                 ai_message = response.choices[0].message
 
                 # If no tool calls, we're done - return the text response
                 if not ai_message.tool_calls:
-                    return ai_message.content if ai_message.content else "Task completed."
+                    return (
+                        ai_message.content if ai_message.content else "Task completed."
+                    )
 
                 # Execute all tool calls (thinking indicator is OFF during tool execution)
                 tool_results = []
                 for tool_call in ai_message.tool_calls:
                     result = self.execute_tool_call(tool_call)
-                    
+
                     tool_results.append(
                         {
                             "tool_call_id": tool_call.id,
@@ -261,9 +285,9 @@ class AIAssistant:
                 # Add assistant message and tool results to chat history
                 self.chat_history.append(ai_message)
                 self.chat_history.extend(tool_results)
-                
+
                 # Loop continues - will make another API call with updated history
-                
+
             except KeyboardInterrupt:
                 # User pressed Ctrl+C during the agent loop
                 raise UserInterruptException("User interrupted agent loop")

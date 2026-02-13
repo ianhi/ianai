@@ -6,7 +6,9 @@ class FileLister:
         """Initialize the FileLister."""
         pass
 
-    def list_files(self, directory=".", pattern=None, recursive=False, show_hidden=False):
+    def list_files(
+        self, directory=".", pattern=None, recursive=False, show_hidden=False
+    ):
         """
         List files and directories at the specified path.
 
@@ -34,64 +36,66 @@ class FileLister:
                 for root, dirs, files in os.walk(directory):
                     # Filter hidden directories if needed
                     if not show_hidden:
-                        dirs[:] = [d for d in dirs if not d.startswith('.')]
-                        files = [f for f in files if not f.startswith('.')]
-                    
+                        dirs[:] = [d for d in dirs if not d.startswith(".")]
+                        files = [f for f in files if not f.startswith(".")]
+
                     # Apply pattern filter if specified
                     if pattern:
                         files = [f for f in files if self._match_pattern(f, pattern)]
-                    
+
                     for file in files:
                         rel_path = os.path.relpath(os.path.join(root, file), directory)
                         file_size = os.path.getsize(os.path.join(root, file))
                         files_list.append((rel_path, file_size))
-                    
+
                     for dir_name in dirs:
-                        rel_path = os.path.relpath(os.path.join(root, dir_name), directory)
+                        rel_path = os.path.relpath(
+                            os.path.join(root, dir_name), directory
+                        )
                         dirs_list.append(rel_path)
             else:
                 # List only direct contents
                 items = os.listdir(directory)
-                
+
                 # Filter hidden items if needed
                 if not show_hidden:
-                    items = [item for item in items if not item.startswith('.')]
-                
+                    items = [item for item in items if not item.startswith(".")]
+
                 for item in items:
                     full_path = os.path.join(directory, item)
-                    
+
                     if os.path.isdir(full_path):
                         dirs_list.append(item)
                     else:
                         # Apply pattern filter if specified
                         if pattern and not self._match_pattern(item, pattern):
                             continue
-                        
+
                         file_size = os.path.getsize(full_path)
                         files_list.append((item, file_size))
 
             # Format the output
             result = f"Contents of '{directory}':\n"
             result += "=" * 50 + "\n\n"
-            
+
             if dirs_list:
                 result += "Directories:\n"
                 for dir_name in sorted(dirs_list):
                     result += f"  📁 {dir_name}/\n"
                 result += "\n"
-            
+
             if files_list:
                 result += "Files:\n"
                 for file_name, file_size in sorted(files_list):
                     size_str = self._format_size(file_size)
                     result += f"  📄 {file_name} ({size_str})\n"
-            
+
             if not dirs_list and not files_list:
                 result += "  (empty or no matching files)\n"
-            
+
             result += "\n" + "=" * 50 + "\n"
             result += f"Total: {len(dirs_list)} directories, {len(files_list)} files"
-            
+
             return result
 
         except Exception as e:
@@ -110,6 +114,7 @@ class FileLister:
             bool: True if filename matches pattern
         """
         import fnmatch
+
         return fnmatch.fnmatch(filename, pattern)
 
     def _format_size(self, size_bytes):
@@ -122,7 +127,7 @@ class FileLister:
         Returns:
             str: Formatted size string
         """
-        for unit in ['B', 'KB', 'MB', 'GB']:
+        for unit in ["B", "KB", "MB", "GB"]:
             if size_bytes < 1024.0:
                 return f"{size_bytes:.1f} {unit}"
             size_bytes /= 1024.0

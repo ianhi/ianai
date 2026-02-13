@@ -47,6 +47,7 @@ class AIAssistant:
         # Initialize our tools
         self.file_editor = FileEditor()
         self.file_reader = FileReader()
+        self.file_writer = FileWriter()
         self.file_deleter = FileDeleter()
         self.file_inserter = FileInserter(self.file_reader)
         self.file_lister = FileLister()
@@ -235,6 +236,12 @@ class AIAssistant:
                 result = result.get("message", "Operation completed")
             else:
                 self.ui.show_tool_result(result)
+        elif tool_call.function.name == "delete_file":
+            result = self.file_deleter.delete_file(**args)
+            self.ui.show_tool_result(result)
+        elif tool_call.function.name == "delete_directory":
+            result = self.file_deleter.delete_directory(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "list_files":
             result = self.file_lister.list_files(**args)
             self.ui.show_tool_result(result)
@@ -305,4 +312,3 @@ from dotenv import load_dotenv
 load_dotenv()
 agent = AIAssistant()
 agent.run_loop()
-

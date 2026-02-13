@@ -658,6 +658,7 @@ class OpenAIHandler:
     """Manages OpenAI API interactions."""
 
     DEFAULT_MODEL = "anthropic/claude-haiku-4.5"
+    DEFAULT_MODEL = "qwen/qwen3-coder-flash"
 
     def __init__(self, write_tool: WriteTool):
         """Initialize OpenAI client with API key from environment."""
@@ -737,10 +738,6 @@ class OpenAIHandler:
             {
                 "role": "system",
                 "content": "You are an expert coder working as a co-programmer to develop an AI agent. You have access to write_file and append_to_file tools that allow you to save files directly. When you generate code or configuration files, use these tools to save them automatically.",
-            },
-            {
-                "role": "user",
-                "content": f"Please analyze and suggest improvements for the following code{f' ({file_name})' if file_name else ''}. Use the write_file tool to save any improved versions you create.",
             },
             {"role": "user", "content": file_contents},
         ]

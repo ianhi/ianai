@@ -3,6 +3,20 @@ import os
 import json
 from openai import OpenAI
 
+# System prompt used for initializing and when switching models
+SYSTEM_PROMPT = """You are a helpful AI assistant that can read and write files.
+
+Always make a plan before starting to edit files.
+
+When working with files, be efficient and selective:
+- Use list_files to explore directory structure before reading specific files
+- Only read files that are directly relevant to the user's request
+- Avoid reading multiple files when one or two will suffice to answer the question
+- When listing files, use patterns to filter results and avoid overwhelming output
+- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+- Ask yourself: "Do I really need to read this file to answer the user's question?"
+"""
+
 # Import our custom tools
 from file_editing3 import FileEditor
 from file_reader import FileReader
@@ -44,6 +58,9 @@ class AIAssistant:
         self.model = model
         self.ui = AssistantUI()
 
+        # Store original system prompt to reuse if needed
+        self.original_system_prompt = SYSTEM_PROMPT
+
         # Initialize our tools
         self.file_editor = FileEditor()
         self.file_reader = FileReader()
@@ -62,18 +79,7 @@ class AIAssistant:
         self.chat_history: list[dict[str, str]] = [
             {
                 "role": "system",
-                "content": """You are a helpful AI assistant that can read and write files.
-
-                Always make a plan before starting to edit files.
-
-                When working with files, be efficient and selective:
-                - Use list_files to explore directory structure before reading specific files
-                - Only read files that are directly relevant to the user's request
-                - Avoid reading multiple files when one or two will suffice to answer the question
-                - When listing files, use patterns to filter results and avoid overwhelming output
-                - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
-                - Ask yourself: "Do I really need to read this file to answer the user's question?"
-                """,
+                "content": SYSTEM_PROMPT,
             }
         ]
 
@@ -83,28 +89,20 @@ class AIAssistant:
             new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)
             if new_model and new_model != self.model:
                 self.model = new_model
-                # Reset chat history when switching models
-                self.chat_history = [
-                    {
-                        "role": "system",
-                        "content": """You are a helpful AI assistant that can read and write files.
-
-                        Always make a plan before starting to edit files.
-
-                        When working with files, be efficient and selective:
-                        - Use list_files to explore directory structure before reading specific files
-                        - Only read files that are directly relevant to the user's request
-                        - Avoid reading multiple files when one or two will suffice to answer the question
-                        - When listing files, use patterns to filter results and avoid overwhelming output
-                        - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
-                        - Ask yourself: "Do I really need to read this file to answer the user's question?"
-                        """,
-                    }
-                ]
                 self.ui.show_info(f"✓ Switched to model: {self.model}")
         except KeyboardInterrupt:
             # User cancelled model selection
             self.ui.show_info("Model selection cancelled")
+
+    def clear_chat_history(self):
+        """Clear the chat history and reset to system prompt only"""
+        self.chat_history = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            }
+        ]
+        self.ui.show_info("Chat history cleared.")
 
     def run_loop(self):
         """
@@ -124,6 +122,11 @@ class AIAssistant:
                 if user_input.strip().lower() == "/model":
                     self.switch_model()
                     self.ui.show_model_info(self.model)
+                    continue
+                
+                # Handle clear history command
+                if user_input.strip().lower() == "/clear":
+                    self.clear_chat_history()
                     continue
 
                 if len(user_input) < 4:

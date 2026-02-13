@@ -33,6 +33,7 @@ Welcome to your AI-powered file assistant!
 **Available Commands:**
 - Type your message to interact with the AI
 - Use `@filename` to insert file contents into your prompts
+- Type `/model` to switch between AI models
 - Type `quit`, `exit`, or `q` to exit
         """
         self.console.print(Panel(
@@ -137,6 +138,42 @@ Welcome to your AI-powered file assistant!
     def show_model_info(self, model: str):
         """Display current model information"""
         self.console.print(f"[dim]Using model: {model}[/dim]\n")
+        
+    def show_model_selector(self, models: list, current_model: str) -> str:
+        """Display model selection menu and return selected model"""
+        # Create a table showing available models
+        table = Table(title="🤖 Available AI Models", box=box.ROUNDED, border_style="cyan")
+        table.add_column("Number", style="cyan", justify="center")
+        table.add_column("Model", style="green")
+        table.add_column("Status", style="yellow")
+        
+        for idx, model in enumerate(models, 1):
+            status = "✓ Current" if model == current_model else ""
+            table.add_row(str(idx), model, status)
+        
+        self.console.print("\n")
+        self.console.print(table)
+        self.console.print("\n")
+        
+        # Get user selection
+        while True:
+            try:
+                choice = Prompt.ask(
+                    "[bold cyan]Select model number[/bold cyan]",
+                    choices=[str(i) for i in range(1, len(models) + 1)]
+                )
+                selected_model = models[int(choice) - 1]
+                
+                # Confirm selection
+                self.console.print(Panel(
+                    f"✓ Model switched to: [bold green]{selected_model}[/bold green]",
+                    border_style="green",
+                    box=box.ROUNDED
+                ))
+                
+                return selected_model
+            except (ValueError, IndexError):
+                self.show_error("Invalid selection. Please try again.")
         
     def clear_screen(self):
         """Clear the console screen"""

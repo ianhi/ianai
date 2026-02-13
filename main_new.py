@@ -18,14 +18,20 @@ class UserInterruptException(Exception):
 
 
 class AIAssistant:
+    # Available models
+    AVAILABLE_MODELS = [
+        "anthropic/claude-sonnet-4.5",
+        "qwen/qwen3-coder-flash",
+        "anthropic/claude-haiku-4.5"
+    ]
+    
     def __init__(self, api_key=None, model="anthropic/claude-sonnet-4.5"):
-        # model="qwen/qwen3-coder-flash"):
         """
         Initialize the AI Assistant.
 
         Args:
             api_key (str): OpenRouter API key
-            model (str): Model to use (default: openai/gpt-4)
+            model (str): Model to use (default: anthropic/claude-sonnet-4.5)
         """
         self.client = OpenAI(
             api_key=api_key or os.getenv("OPENROUTER_API_KEY"),
@@ -55,6 +61,19 @@ class AIAssistant:
             }
         ]
 
+    def switch_model(self):
+        """Allow user to switch between available models"""
+        new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)
+        self.model = new_model
+        
+        # Update system message to reflect model change
+        self.chat_history = [
+            {
+                "role": "system",
+                "content": "You are a helpful AI assistant that can read and write files.",
+            }
+        ]
+
     def run_loop(self):
         """
         Run the interactive loop where user can type inputs and get AI responses.
@@ -68,6 +87,12 @@ class AIAssistant:
                 self.ui.show_separator()
                 
                 user_input = self.ui.get_user_input()
+                
+                # Handle model switching command
+                if user_input.strip().lower() == "/model":
+                    self.switch_model()
+                    self.ui.show_model_info(self.model)
+                    continue
                 
                 if len(user_input) < 4:
                     self.ui.show_info("Input too short, please try again")

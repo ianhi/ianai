@@ -22,6 +22,11 @@ class FileHandler:
         ".json",
         ".yaml",
         ".yml",
+        ".html",
+        ".css",
+        ".sql",
+        ".sh",
+        ".bash",
     }
 
     @staticmethod
@@ -131,9 +136,16 @@ class WriteTool:
 
     OUTPUT_DIR = Path("./ai_generated_files")
 
-    def __init__(self):
-        """Initialize the write tool and create output directory."""
-        self.OUTPUT_DIR.mkdir(exist_ok=True)
+    def __init__(self, output_dir: Optional[str] = None):
+        """Initialize the write tool and create output directory.
+
+        Args:
+            output_dir: Optional custom output directory path
+        """
+        if output_dir:
+            self.OUTPUT_DIR = Path(output_dir)
+
+        self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.write_history = []
 
     def write_file(
@@ -155,6 +167,8 @@ class WriteTool:
         Returns:
             Dictionary with status, file_path, and message
         """
+        # Sanitize filename to prevent path traversal
+        filename = self._sanitize_filename(filename)
         file_path = self.OUTPUT_DIR / filename
 
         # Validate the write path
@@ -193,6 +207,59 @@ class WriteTool:
                 "message": f"Failed to write file: {filename}",
             }
 
+    def append_to_file(
+        self,
+        filename: str,
+        content: str,
+        description: str = "",
+    ) -> dict:
+        """
+        Append content to an existing file.
+
+        Args:
+            filename: Name of the file to append to
+            content: Content to append to the file
+            description: Optional description of what was appended
+
+        Returns:
+            Dictionary with status, file_path, and message
+        """
+        filename = self._sanitize_filename(filename)
+        file_path = self.OUTPUT_DIR / filename
+
+        if not file_path.exists():
+            return {
+                "success": False,
+                "file_path": str(file_path),
+                "message": f"File '{filename}' does not exist. Use write_file to create it.",
+            }
+
+        try:
+            with open(file_path, "a", encoding="utf-8") as file:
+                file.write(content)
+
+            record = {
+                "timestamp": datetime.now().isoformat(),
+                "filename": filename,
+                "file_path": str(file_path),
+                "description": f"Appended: {description}",
+                "size": len(content),
+            }
+            self.write_history.append(record)
+
+            return {
+                "success": True,
+                "file_path": str(file_path),
+                "message": f"Successfully appended to file: {file_path}",
+                "size_bytes": len(content),
+            }
+        except (PermissionError, IOError) as e:
+            return {
+                "success": False,
+                "file_path": str(file_path),
+                "message": f"Failed to append to file: {str(e)}",
+            }
+
     def list_written_files(self) -> list:
         """Get list of all files written by the AI."""
         return self.write_history
@@ -207,16 +274,28 @@ class WriteTool:
             summary += f"  - {record['filename']} ({record['size']} bytes) - {record['description']}\n"
         return summary
 
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        """Sanitize filename to prevent path traversal attacks."""
+        # Remove any path separators
+        filename = filename.replace("\\", "").replace("/", "")
+        # Remove leading dots
+        filename = filename.lstrip(".")
+        # Remove any null bytes
+        filename = filename.replace("\x00", "")
+        return filename or "unnamed_file.txt"
+
 
 class CodeExtractor:
     """Extracts and manages Python code blocks from responses."""
 
     OUTPUT_DIR = Path("./generated_versions")
     PYTHON_BLOCK_PATTERN = r"```python\n(.*?)\n```"
+    CODE_BLOCK_PATTERN = r"```(\w+)?\n(.*?)\n```"
 
     def __init__(self):
         """Initialize the extractor and create output directory."""
-        self.OUTPUT_DIR.mkdir(exist_ok=True)
+        self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.version_counter = self._get_next_version()
 
     def _get_next_version(self) -> int:
@@ -233,13 +312,36 @@ class CodeExtractor:
 
         return max(versions) + 1 if versions else 1
 
-    def extract_code_blocks(self, text: str) -> list[tuple[int, str]]:
+    def extract_code_blocks(
+        self, text: str, language: str = "python"
+    ) -> list[tuple[int, str]]:
         """
-        Extract all Python code blocks from text.
+        Extract code blocks from text by language.
         Returns list of tuples: (block_number, code_content)
         """
-        blocks = re.findall(self.PYTHON_BLOCK_PATTERN, text, re.DOTALL)
+        if language.lower() == "python":
+            pattern = self.PYTHON_BLOCK_PATTERN
+        else:
+            pattern = self.CODE_BLOCK_PATTERN
+
+        blocks = re.findall(pattern, text, re.DOTALL)
         return [(i + 1, block) for i, block in enumerate(blocks)]
+
+    def extract_all_code_blocks(self, text: str) -> dict[str, list[tuple[int, str]]]:
+        """Extract all code blocks organized by language."""
+        matches = re.findall(r"```(\w+)?\n(.*?)\n```", text, re.DOTALL)
+
+        blocks_by_lang = {}
+        for lang, code in matches:
+            language = lang if lang else "unknown"
+            if language not in blocks_by_lang:
+                blocks_by_lang[language] = []
+            blocks_by_lang[language].append(code)
+
+        return {
+            lang: [(i + 1, code) for i, code in enumerate(codes)]
+            for lang, codes in blocks_by_lang.items()
+        }
 
     def save_code_block(self, code: str, description: str = "") -> Path:
         """
@@ -307,8 +409,13 @@ class UIFormatter:
             print(char * total_length)
 
     @staticmethod
-    def print_user_message(message: str) -> None:
-        """Print user message with formatting."""
+    def print_user_message(message: str, show_raw: bool = False) -> None:
+        """Print user message with formatting.
+
+        Args:
+            message: The message to display
+            show_raw: If True, shows the raw input; if False, shows sanitized version
+        """
         UIFormatter.print_separator("YOU", "─")
         print(f"{UIFormatter.COLORS['user']}{message}{UIFormatter.COLORS['reset']}")
         UIFormatter.print_separator()
@@ -351,23 +458,27 @@ class UIFormatter:
         UIFormatter.print_separator()
 
     @staticmethod
-    def get_user_input() -> str:
+    def get_user_input(prompt: str = "") -> str:
         """Get user input with visual separator."""
+        if not prompt:
+            prompt = "You"
         print(
-            f"\n{UIFormatter.COLORS['user']}{UIFormatter.COLORS['bold']}➜ You:{UIFormatter.COLORS['reset']} ",
+            f"\n{UIFormatter.COLORS['user']}{UIFormatter.COLORS['bold']}➜ {prompt}:{UIFormatter.COLORS['reset']} ",
             end="",
         )
         return input().strip()
 
     @staticmethod
-    def print_code_blocks(blocks: list[tuple[int, str]]) -> None:
+    def print_code_blocks(
+        blocks: list[tuple[int, str]], language: str = "python"
+    ) -> None:
         """Display extracted code blocks."""
         print(
-            f"\n{UIFormatter.COLORS['system']}Found {len(blocks)} code block(s):{UIFormatter.COLORS['reset']}\n"
+            f"\n{UIFormatter.COLORS['system']}Found {len(blocks)} {language} code block(s):{UIFormatter.COLORS['reset']}\n"
         )
 
         for block_num, _ in blocks:
-            print(f"  [{block_num}] Python code block")
+            print(f"  [{block_num}] {language.capitalize()} code block")
 
     @staticmethod
     def print_write_result(result: dict) -> None:
@@ -388,6 +499,7 @@ class UserInterface:
         self.formatter = UIFormatter()
         self.code_extractor = CodeExtractor()
         self.write_tool = WriteTool()
+        self.current_file_path: Optional[Path] = None
 
     def ask_for_permission(self, file_path: str) -> bool:
         """Ask user for permission to read file."""
@@ -403,7 +515,7 @@ class UserInterface:
                 return False
             print("Please enter 'y' or 'n'.")
 
-    def get_file_path(self) -> Path:
+    def get_file_path(self) -> Optional[Path]:
         """Prompt user for a valid file path with validation."""
         while True:
             file_path = input("Enter the path of the file you want to read: ").strip()
@@ -414,7 +526,39 @@ class UserInterface:
 
             validated_path = FileHandler.validate_path(file_path)
             if validated_path:
+                self.current_file_path = validated_path
                 return validated_path
+
+    def process_user_input(self, user_input: str) -> tuple[str, Optional[Path]]:
+        """
+        Process user input to check for file loading with @ syntax.
+        Returns tuple of (processed_message, file_path_if_any)
+
+        Examples:
+            "@path/to/file.py" -> loads file and returns ("", file_path)
+            "question here" -> returns ("question here", None)
+            "question @file.py more" -> loads file, returns ("question here more", file_path)
+        """
+        # Check if input contains @ file reference
+        if "@" in user_input:
+            # Extract file path from @...
+            match = re.search(r"@([^\s]+)", user_input)
+            if match:
+                file_ref = match.group(1)
+                validated_path = FileHandler.validate_path(file_ref)
+
+                if validated_path:
+                    self.current_file_path = validated_path
+                    # Remove the @file reference from the message
+                    processed_message = re.sub(r"@\S+", "", user_input).strip()
+                    return (processed_message, validated_path)
+                else:
+                    self.formatter.print_error_message(
+                        f"Could not load file: {file_ref}"
+                    )
+                    return (user_input, None)
+
+        return (user_input, None)
 
     def display_file_contents(self, contents: str, filename: str) -> None:
         """Display file contents in a formatted way."""
@@ -424,17 +568,8 @@ class UserInterface:
         """Check if user wants to exit."""
         return text.lower() in ["exit", "quit", "bye", "q"]
 
-    @staticmethod
-    def get_user_input() -> str:
-        """Get user input with visual separator."""
-        print(
-            f"\n{UIFormatter.COLORS['user']}{UIFormatter.COLORS['bold']}➜ You:{UIFormatter.COLORS['reset']} ",
-            end="",
-        )
-        return input().strip()
-
     def handle_code_extraction(self, response: str) -> None:
-        """Handle code block extraction from response."""
+        """Handle code block extraction from response with multiple selection."""
         blocks = self.code_extractor.extract_code_blocks(response)
 
         if not blocks:
@@ -458,11 +593,16 @@ class UserInterface:
                 ).strip()
                 self._save_block(blocks[0], description)
         else:
-            # Multiple blocks - let user choose
+            # Multiple blocks - let user select multiple
+            selected_blocks = []
+            print(
+                f"\n{UIFormatter.COLORS['system']}Select blocks to save (e.g., '1,2,3' or '1-3' or 'a' for all):{UIFormatter.COLORS['reset']}"
+            )
+
             while True:
                 choice = (
                     input(
-                        f"\n{UIFormatter.COLORS['system']}Which block to save? (1-{len(blocks)}/s for skip): {UIFormatter.COLORS['reset']}"
+                        f"{UIFormatter.COLORS['system']}Block numbers (or 's' to skip): {UIFormatter.COLORS['reset']}"
                     )
                     .strip()
                     .lower()
@@ -471,18 +611,38 @@ class UserInterface:
                 if choice == "s":
                     break
 
+                if choice == "a":
+                    selected_blocks = list(range(len(blocks)))
+                    break
+
+                # Parse comma/dash separated numbers
                 try:
-                    block_num = int(choice)
-                    if 1 <= block_num <= len(blocks):
-                        description = input(
-                            f"{UIFormatter.COLORS['system']}Brief description (optional): {UIFormatter.COLORS['reset']}"
-                        ).strip()
-                        self._save_block(blocks[block_num - 1], description)
+                    block_indices = []
+                    for part in choice.split(","):
+                        part = part.strip()
+                        if "-" in part:
+                            start, end = part.split("-")
+                            block_indices.extend(range(int(start) - 1, int(end)))
+                        else:
+                            block_indices.append(int(part) - 1)
+
+                    # Validate indices
+                    if all(0 <= idx < len(blocks) for idx in block_indices):
+                        selected_blocks = list(set(block_indices))  # Remove duplicates
                         break
                     else:
-                        print(f"Please enter a number between 1 and {len(blocks)}")
-                except ValueError:
-                    print("Invalid input. Enter a number or 's' to skip.")
+                        print(f"Please enter numbers between 1 and {len(blocks)}")
+                except (ValueError, AttributeError):
+                    print("Invalid input. Use '1,2,3' or '1-3' or 'a' for all")
+
+            # Save selected blocks
+            if selected_blocks:
+                description = input(
+                    f"{UIFormatter.COLORS['system']}Brief description (optional): {UIFormatter.COLORS['reset']}"
+                ).strip()
+
+                for idx in sorted(selected_blocks):
+                    self._save_block(blocks[idx], f"{description} (block {idx + 1})")
 
     def _save_block(self, block: tuple[int, str], description: str = "") -> None:
         """Save a code block to file."""
@@ -519,13 +679,13 @@ class OpenAIHandler:
                 "type": "function",
                 "function": {
                     "name": "write_file",
-                    "description": "Write content to a file. The file will be saved in the ai_generated_files directory.",
+                    "description": "Write content to a file. The file will be saved in the ai_generated_files directory. Perfect for saving improved code, configurations, documentation, etc.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "filename": {
                                 "type": "string",
-                                "description": "Name of the file to write (e.g., 'improved_code.py')",
+                                "description": "Name of the file to write (e.g., 'improved_code.py', 'config.json'). Can include subdirectories.",
                             },
                             "content": {
                                 "type": "string",
@@ -543,19 +703,44 @@ class OpenAIHandler:
                         "required": ["filename", "content"],
                     },
                 },
-            }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "append_to_file",
+                    "description": "Append content to an existing file. File must exist or use write_file instead.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {
+                                "type": "string",
+                                "description": "Name of the existing file to append to",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The content to append to the file",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Description of what was appended",
+                            },
+                        },
+                        "required": ["filename", "content"],
+                    },
+                },
+            },
         ]
 
-    def analyze_code(self, file_contents: str) -> str:
+    def analyze_code(self, file_contents: str, file_name: str = "") -> str:
         """Get initial analysis of code from AI."""
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert coder working as a co-programmer to develop an AI agent. You have access to a write_file tool that allows you to save files directly. When you generate code or configuration files, use this tool to save them.",
+                "content": "You are an expert coder working as a co-programmer to develop an AI agent. You have access to write_file and append_to_file tools that allow you to save files directly. When you generate code or configuration files, use these tools to save them automatically.",
             },
             {
                 "role": "user",
-                "content": "Below are the current contents of the python file we are developing. Please help me improve by adding a write tool so the model can write files directly.",
+                "content": f"Please analyze and suggest improvements for the following code{f' ({file_name})' if file_name else ''}. Use the write_file tool to save any improved versions you create.",
             },
             {"role": "user", "content": file_contents},
         ]
@@ -569,8 +754,15 @@ class OpenAIHandler:
 
         # Process any tool calls
         if tool_calls:
+            tool_results = []
             for tool_call in tool_calls:
-                self._process_tool_call(tool_call, messages)
+                result = self._process_tool_call(tool_call, messages)
+                tool_results.append(result)
+
+            # Display tool results to user
+            for result in tool_results:
+                if result["success"]:
+                    UIFormatter.print_write_result(result)
 
         return response, messages
 
@@ -605,11 +797,12 @@ class OpenAIHandler:
         except Exception as e:
             raise RuntimeError(f"API communication error: {e}")
 
-    def _process_tool_call(self, tool_call, messages: list) -> None:
-        """Process a tool call from the AI model."""
-        if tool_call.function.name == "write_file":
-            try:
-                args = json.loads(tool_call.function.arguments)
+    def _process_tool_call(self, tool_call, messages: list) -> dict:
+        """Process a tool call from the AI model and return result."""
+        try:
+            args = json.loads(tool_call.function.arguments)
+
+            if tool_call.function.name == "write_file":
                 result = self.write_tool.write_file(
                     filename=args.get("filename"),
                     content=args.get("content"),
@@ -617,17 +810,39 @@ class OpenAIHandler:
                     allow_overwrite=args.get("allow_overwrite", False),
                 )
 
-                # Add tool result to messages
-                messages.append(
-                    {"role": "user", "content": f"Tool result: {json.dumps(result)}"}
+            elif tool_call.function.name == "append_to_file":
+                result = self.write_tool.append_to_file(
+                    filename=args.get("filename"),
+                    content=args.get("content"),
+                    description=args.get("description", ""),
                 )
-            except (json.JSONDecodeError, KeyError) as e:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": f"Tool error: Invalid arguments - {str(e)}",
-                    }
-                )
+            else:
+                result = {
+                    "success": False,
+                    "message": f"Unknown tool: {tool_call.function.name}",
+                }
+
+            # Add tool result to messages for context
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result: {json.dumps(result)}",
+                }
+            )
+
+            return result
+        except (json.JSONDecodeError, KeyError) as e:
+            error_result = {
+                "success": False,
+                "message": f"Tool error: Invalid arguments - {str(e)}",
+            }
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool error: {str(e)}",
+                }
+            )
+            return error_result
 
 
 class AICodeReviewAgent:
@@ -642,32 +857,77 @@ class AICodeReviewAgent:
     def run(self) -> None:
         """Execute the main workflow."""
         try:
-            # Step 1: Get file
-            file_path = self.ui.get_file_path()
+            self.formatter.print_system_message(
+                "AI Code Review Agent Started\n"
+                "You can:\n"
+                "  • Ask questions or give feedback\n"
+                "  • Load a file with @path/to/file.py syntax\n"
+                "  • Type 'exit' to quit"
+            )
 
-            # Step 2: Ask permission
-            if not self.ui.ask_for_permission(str(file_path)):
-                self.formatter.print_system_message("Permission denied. Exiting.")
+            # Initialize conversation with optional file
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an expert coder working as a co-programmer. You have access to write_file and append_to_file tools. Use them to save any code improvements, documentation, tests, or configuration files you suggest.",
+                },
+            ]
+
+            file_contents = None
+            file_name = ""
+
+            # Check if a file was provided on startup
+            initial_input = self.formatter.get_user_input(
+                "Start (enter question or @file.py to load)"
+            )
+
+            if self.ui.is_exit_command(initial_input):
+                self.formatter.print_system_message("Goodbye!")
                 return
 
-            # Step 3: Read file
-            file_contents = FileHandler.read_file(file_path)
-            if not file_contents:
-                return
+            processed_input, file_path = self.ui.process_user_input(initial_input)
 
-            # Step 4: Display file
-            self.ui.display_file_contents(file_contents, file_path.name)
+            if file_path:
+                # Load file
+                file_name = file_path.name
+                file_contents = FileHandler.read_file(file_path)
+                if not file_contents:
+                    self.formatter.print_error_message(
+                        f"Failed to read file: {file_path}"
+                    )
+                    return
 
-            # Step 5: Analyze with AI
-            self.formatter.print_system_message("Analyzing code...")
-            analysis = self.openai.analyze_code(file_contents)
-            self.formatter.print_assistant_message(analysis)
+                self.ui.display_file_contents(file_contents, file_name)
 
-            # Handle code extraction from initial analysis
-            self.ui.handle_code_extraction(analysis)
+                # Initial analysis
+                self.formatter.print_system_message("Analyzing code...")
+                analysis = self.openai.analyze_code(file_contents, file_name)
+                self.formatter.print_assistant_message(analysis)
+                self.ui.handle_code_extraction(analysis)
 
-            # Step 6: Interactive chat
-            self._interactive_chat(analysis, file_contents)
+                # Add to messages
+                messages.extend(
+                    [
+                        {
+                            "role": "user",
+                            "content": f"Please analyze and suggest improvements for the following code ({file_name}).",
+                        },
+                        {"role": "user", "content": file_contents},
+                        {"role": "assistant", "content": analysis},
+                    ]
+                )
+            elif processed_input:
+                # Just a question, no file
+                self.formatter.print_user_message(processed_input, show_raw=False)
+                messages.append({"role": "user", "content": processed_input})
+
+                self.formatter.print_system_message("Thinking...")
+                response, messages = self.openai.chat(messages)
+                self.formatter.print_assistant_message(response)
+                self.ui.handle_code_extraction(response)
+
+            # Interactive chat loop
+            self._interactive_chat(messages)
 
         except ValueError as e:
             self.formatter.print_error_message(f"Configuration error: {e}")
@@ -676,27 +936,14 @@ class AICodeReviewAgent:
         except Exception as e:
             self.formatter.print_error_message(f"An unexpected error occurred: {e}")
 
-    def _interactive_chat(self, initial_response: str, file_contents: str) -> None:
+    def _interactive_chat(self, messages: list) -> None:
         """Run interactive chat session with the AI."""
-        messages = [
-            {
-                "role": "system",
-                "content": "You are an expert coder working as a co-programmer to develop an AI agent. You have access to a write_file tool that allows you to save files directly. Use it to save any code improvements you suggest.",
-            },
-            {
-                "role": "user",
-                "content": "Below are the current contents of the python file we are developing. Please propose improvements to the flow and file reading capabilities.",
-            },
-            {"role": "user", "content": file_contents},
-            {"role": "assistant", "content": initial_response},
-        ]
-
         self.formatter.print_system_message(
-            "Starting interactive chat. Type 'exit' or 'quit' to end."
+            "Interactive chat started. Type 'exit' or 'quit' to end."
         )
 
         while True:
-            user_input = self.ui.get_user_input()
+            user_input = self.formatter.get_user_input()
 
             if self.ui.is_exit_command(user_input):
                 self.formatter.print_system_message("Exiting chat. Goodbye!")
@@ -710,15 +957,51 @@ class AICodeReviewAgent:
                 self.formatter.print_error_message("Please enter a message.")
                 continue
 
-            self.formatter.print_user_message(user_input)
-            messages.append({"role": "user", "content": user_input})
+            # Process input for file loading
+            processed_input, file_path = self.ui.process_user_input(user_input)
+
+            if file_path:
+                # File was loaded
+                file_name = file_path.name
+                file_contents = FileHandler.read_file(file_path)
+                if not file_contents:
+                    self.formatter.print_error_message(
+                        f"Failed to read file: {file_path}"
+                    )
+                    continue
+
+                self.ui.display_file_contents(file_contents, file_name)
+
+                # Create message about the file
+                if processed_input:
+                    display_message = f"{processed_input}\n[File loaded: {file_name}]"
+                else:
+                    display_message = f"[File loaded: {file_name}]"
+
+                self.formatter.print_user_message(display_message, show_raw=False)
+
+                # Append file content to message
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"{processed_input}\n\nFile content ({file_name}):\n{file_contents}"
+                        if processed_input
+                        else f"Please review this file ({file_name}):\n{file_contents}",
+                    }
+                )
+            else:
+                # Just a regular message
+                if processed_input:
+                    self.formatter.print_user_message(processed_input, show_raw=False)
+                    messages.append({"role": "user", "content": processed_input})
+                else:
+                    self.formatter.print_error_message("Please enter a message.")
+                    continue
 
             try:
                 self.formatter.print_system_message("Thinking...")
                 response, messages = self.openai.chat(messages)
                 self.formatter.print_assistant_message(response)
-
-                # Handle code extraction from response
                 self.ui.handle_code_extraction(response)
 
             except RuntimeError as e:

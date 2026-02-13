@@ -1,11 +1,17 @@
 import os
 import difflib
 
+try:
+    from python_validator import PythonValidator, has_ruff  # Try to import PythonValidator
+except ImportError:
+    PythonValidator = None
+    has_ruff = lambda: False  # Define as a function that always returns False
+
 
 class FileEditor:
     def __init__(self):
         """Initialize the FileEditor."""
-        pass
+        self.python_validator = PythonValidator() if PythonValidator else None
 
     def _generate_diff(self, old_content, new_content, file_path):
         """
@@ -32,9 +38,38 @@ class FileEditor:
 
         return "".join(diff)
 
+    def _validate_and_format_python_content(self, content, file_path):
+        """
+        Validate and format Python content if it's a Python file.
+        
+        Args:
+            content (str): Content to validate and format
+            file_path (str): Path of the file
+            
+        Returns:
+            tuple: (new_content, success_bool, error_message)
+        """
+        if not file_path.endswith('.py'):
+            return content, True, ""  # Not Python, skip validation
+            
+        if not has_ruff():
+            return content, True, ""  # Ruff not available, skip validation
+            
+        if not self.python_validator:
+            return content, True, ""  # No validator, skip
+            
+        try:
+            validated_content, success, error_msg = self.python_validator.validate_and_format_python(content)
+            if not success:
+                return content, False, f"Python validation failed: {error_msg}"
+            return validated_content, success, ""
+        except Exception as e:
+            return content, False, f"Python validation error: {str(e)}"
+
     def edit_file(self, file_path, content, mode="w"):
         """
         Edit a file at the specified path by writing content to it.
+        If it's a Python file and ruff is available, content is validated and formatted.
 
         Args:
             file_path (str): Relative path to the file to edit
@@ -51,23 +86,45 @@ class FileEditor:
                 with open(file_path, "r", encoding="utf-8") as file:
                     old_content = file.read()
 
-            # Create directories if they don't exist
-            dir_path = os.path.dirname(file_path)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-
             # Determine new content based on mode
             if mode == "a" and old_content:
                 new_content = old_content + content
             else:
                 new_content = content
 
-            # Write the file
-            with open(file_path, mode, encoding="utf-8") as file:
-                file.write(content)
+            # If it's a .py file, validate with ruff before writing
+            if file_path.endswith('.py'):
+                new_content, validation_success, validation_error = self._validate_and_format_python_content(new_content, file_path)
+                
+                if not validation_success:
+                    return {
+                        "message": validation_error,
+                        "diff": "",
+                        "success": False,
+                    }
 
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content, file_path)
+            # Create directories if they don't exist
+            dir_path = os.path.dirname(file_path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+
+            # Write the potentially validated+formatted file
+            with open(file_path, mode, encoding="utf-8") as file:
+                if mode == 'w':
+                    file.write(new_content)
+
+            # For files that were originally just appended to, we need the correct final content 
+            final_new_content = new_content  
+            if mode == 'a':
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    final_new_content = file.read()
+
+            # Generate diff if needed
+            current_new_content = ""
+            with open(file_path, "r", encoding="utf-8") as file:
+                current_new_content = file.read()
+
+            diff = self._generate_diff(old_content, current_new_content, file_path)
 
             return {
                 "message": f"Successfully edited {file_path}",
@@ -113,6 +170,7 @@ class FileEditor:
     def insert_line(self, file_path, line_number, content):
         """
         Insert a line into a file at the specified line number.
+        If it's a Python file and ruff is available, validates with ruff before writing.
 
         Args:
             file_path (str): Relative path to the file
@@ -140,6 +198,17 @@ class FileEditor:
             lines.insert(line_number, content + "\n")
             new_content = "".join(lines)
 
+            # If it's a Python file, validate with ruff before writing
+            if file_path.endswith('.py'):
+                new_content, validation_success, validation_error = self._validate_and_format_python_content(new_content, file_path)
+                
+                if not validation_success:
+                    return {
+                        "message": validation_error,
+                        "diff": "",
+                        "success": False,
+                    }
+
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(new_content)
@@ -162,6 +231,7 @@ class FileEditor:
     def remove_line(self, file_path, line_number):
         """
         Remove a line from a file at the specified line number.
+        If it's a Python file and ruff is available, validates with ruff before writing.
 
         Args:
             file_path (str): Relative path to the file
@@ -190,6 +260,17 @@ class FileEditor:
             lines.pop(line_number)
             new_content = "".join(lines)
 
+            # If it's a Python file, validate with ruff before writing
+            if file_path.endswith('.py'):
+                new_content, validation_success, validation_error = self._validate_and_format_python_content(new_content, file_path)
+                
+                if not validation_success:
+                    return {
+                        "message": validation_error,
+                        "diff": "",
+                        "success": False,
+                    }
+
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(new_content)
@@ -209,14 +290,15 @@ class FileEditor:
                 "success": False,
             }
 
-    def change_line(self, file_path, line_number, new_content):
+    def change_line(self, file_path, line_number, new_content_line):
         """
         Change the content of a specific line in a file.
+        If it's a Python file and ruff is available, validates with ruff before writing.
 
         Args:
             file_path (str): Relative path to the file
             line_number (int): Line number to change (0-indexed)
-            new_content (str): New content for the line
+            new_content_line (str): New content for the line
 
         Returns:
             dict: Dictionary with 'message', 'diff', and 'success' keys
@@ -238,8 +320,19 @@ class FileEditor:
                 }
 
             # Change the line
-            lines[line_number] = new_content + "\n"
+            lines[line_number] = new_content_line + "\n"
             new_content_full = "".join(lines)
+
+            # If it's a Python file, validate with ruff before writing
+            if file_path.endswith('.py'):
+                new_content_full, validation_success, validation_error = self._validate_and_format_python_content(new_content_full, file_path)
+                
+                if not validation_success:
+                    return {
+                        "message": validation_error,
+                        "diff": "",
+                        "success": False,
+                    }
 
             # Write back to file
             with open(file_path, "w", encoding="utf-8") as file:
@@ -274,8 +367,8 @@ class FileEditor:
                     "name": "edit_file",
                     "description": "Edit a file at the specified path by writing content to it",
                     "parameters": {
-                        "type": "object",  # ADD THIS
-                        "properties": {  # CHANGE: wrap parameters in "properties"
+                        "type": "object",
+                        "properties": {
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file to edit",
@@ -290,7 +383,7 @@ class FileEditor:
                                 "default": "w",
                             },
                         },
-                        "required": ["file_path", "content"],  # ADD THIS
+                        "required": ["file_path", "content"],
                     },
                 },
             },
@@ -300,8 +393,8 @@ class FileEditor:
                     "name": "insert_line",
                     "description": "Insert a line into a file at the specified line number",
                     "parameters": {
-                        "type": "object",  # ADD THIS
-                        "properties": {  # CHANGE: wrap parameters in "properties"
+                        "type": "object",
+                        "properties": {
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -315,7 +408,7 @@ class FileEditor:
                                 "description": "Content to insert",
                             },
                         },
-                        "required": ["file_path", "line_number", "content"],  # ADD THIS
+                        "required": ["file_path", "line_number", "content"],
                     },
                 },
             },
@@ -325,8 +418,8 @@ class FileEditor:
                     "name": "remove_line",
                     "description": "Remove a line from a file at the specified line number",
                     "parameters": {
-                        "type": "object",  # ADD THIS
-                        "properties": {  # CHANGE: wrap parameters in "properties"
+                        "type": "object",
+                        "properties": {
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -336,7 +429,7 @@ class FileEditor:
                                 "description": "Line number to remove (0-indexed)",
                             },
                         },
-                        "required": ["file_path", "line_number"],  # ADD THIS
+                        "required": ["file_path", "line_number"],
                     },
                 },
             },
@@ -346,8 +439,8 @@ class FileEditor:
                     "name": "change_line",
                     "description": "Change the content of a specific line in a file",
                     "parameters": {
-                        "type": "object",  # ADD THIS
-                        "properties": {  # CHANGE: wrap parameters in "properties"
+                        "type": "object",
+                        "properties": {
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -365,57 +458,8 @@ class FileEditor:
                             "file_path",
                             "line_number",
                             "new_content",
-                        ],  # ADD THIS
+                        ],
                     },
                 },
             },
         ]
-
-
-# Example usage
-if __name__ == "__main__":
-    editor = FileEditor()
-
-    # Create a test file
-    result = editor.edit_file("example.txt", "Line 1\nLine 2\nLine 3\nLine 4")
-    print(result["message"])
-    if result["diff"]:
-        print("Diff:")
-        print(result["diff"])
-
-    # Show initial content
-    content = editor.read_file("example.txt")
-    print(f"Initial content:\n{content}")
-
-    # Insert a line at position 2
-    result = editor.insert_line("example.txt", 2, "Inserted line")
-    print(result["message"])
-    if result["diff"]:
-        print("Diff:")
-        print(result["diff"])
-
-    # Show content after insertion
-    content = editor.read_file("example.txt")
-    print(f"After insertion:\n{content}")
-
-    # Change line 1 (0-indexed)
-    result = editor.change_line("example.txt", 1, "Changed line")
-    print(result["message"])
-    if result["diff"]:
-        print("Diff:")
-        print(result["diff"])
-
-    # Show content after changing
-    content = editor.read_file("example.txt")
-    print(f"After changing:\n{content}")
-
-    # Remove line 0
-    result = editor.remove_line("example.txt", 0)
-    print(result["message"])
-    if result["diff"]:
-        print("Diff:")
-        print(result["diff"])
-
-    # Show final content
-    content = editor.read_file("example.txt")
-    print(f"Final content:\n{content}")

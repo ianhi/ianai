@@ -63,16 +63,21 @@ class AIAssistant:
 
     def switch_model(self):
         """Allow user to switch between available models"""
-        new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)
-        self.model = new_model
-        
-        # Update system message to reflect model change
-        self.chat_history = [
-            {
-                "role": "system",
-                "content": "You are a helpful AI assistant that can read and write files.",
-            }
-        ]
+        try:
+            new_model = self.ui.show_model_selector(self.AVAILABLE_MODELS, self.model)
+            if new_model and new_model != self.model:
+                self.model = new_model
+                # Reset chat history when switching models
+                self.chat_history = [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful AI assistant that can read and write files.",
+                    }
+                ]
+                self.ui.show_info(f"✓ Switched to model: {self.model}")
+        except KeyboardInterrupt:
+            # User cancelled model selection
+            self.ui.show_info("Model selection cancelled")
 
     def run_loop(self):
         """
@@ -163,16 +168,44 @@ class AIAssistant:
             self.ui.show_tool_result(result)
         elif tool_call.function.name == "edit_file":
             result = self.file_editor.edit_file(**args)
-            self.ui.show_tool_result(result)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get('message', 'Operation completed'))
+                if result.get('diff'):
+                    self.ui.show_diff(result['diff'], max_lines=10)
+                result = result.get('message', 'Operation completed')
+            else:
+                self.ui.show_tool_result(result)
         elif tool_call.function.name == "insert_line":
             result = self.file_editor.insert_line(**args)
-            self.ui.show_tool_result(result)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get('message', 'Operation completed'))
+                if result.get('diff'):
+                    self.ui.show_diff(result['diff'], max_lines=10)
+                result = result.get('message', 'Operation completed')
+            else:
+                self.ui.show_tool_result(result)
         elif tool_call.function.name == "remove_line":
             result = self.file_editor.remove_line(**args)
-            self.ui.show_tool_result(result)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get('message', 'Operation completed'))
+                if result.get('diff'):
+                    self.ui.show_diff(result['diff'], max_lines=10)
+                result = result.get('message', 'Operation completed')
+            else:
+                self.ui.show_tool_result(result)
         elif tool_call.function.name == "change_line":
             result = self.file_editor.change_line(**args)
-            self.ui.show_tool_result(result)
+            # Handle dict result with diff
+            if isinstance(result, dict):
+                self.ui.show_tool_result(result.get('message', 'Operation completed'))
+                if result.get('diff'):
+                    self.ui.show_diff(result['diff'], max_lines=10)
+                result = result.get('message', 'Operation completed')
+            else:
+                self.ui.show_tool_result(result)
         elif tool_call.function.name == "list_files":
             result = self.file_lister.list_files(**args)
             self.ui.show_tool_result(result)

@@ -94,6 +94,45 @@ Welcome to your AI-powered file assistant!
             box=box.ROUNDED,
             padding=(0, 1)
         ))
+    
+    def show_diff(self, diff: str, max_lines: int = 10):
+        """
+        Display a diff with syntax highlighting, truncating if too long.
+        
+        Args:
+            diff (str): The diff content to display
+            max_lines (int): Maximum number of lines to show before truncating
+        """
+        if not diff:
+            return
+        
+        diff_lines = diff.splitlines()
+        total_lines = len(diff_lines)
+        
+        if total_lines > max_lines:
+            # Truncate and add indicator
+            displayed_diff = "\n".join(diff_lines[:max_lines])
+            displayed_diff += f"\n\n... ({total_lines - max_lines} more lines omitted)"
+            truncated = True
+        else:
+            displayed_diff = diff
+            truncated = False
+        
+        # Use Syntax for diff highlighting
+        syntax = Syntax(displayed_diff, "diff", theme="monokai", line_numbers=False)
+        
+        title = "[bold magenta]📝 Diff"
+        if truncated:
+            title += f" (showing {max_lines}/{total_lines} lines)"
+        title += "[/bold magenta]"
+        
+        self.console.print(Panel(
+            syntax,
+            title=title,
+            border_style="magenta",
+            box=box.ROUNDED,
+            padding=(0, 1)
+        ))
         
     def show_error(self, error: str):
         """Display error message"""

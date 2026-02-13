@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import json
 from openai import OpenAI
 
 # Import our custom tools
@@ -9,6 +10,11 @@ from file_writer import FileWriter
 from file_inserter import FileInserter
 from file_lister import FileLister
 from UI import AssistantUI
+
+
+class UserInterruptException(Exception):
+    """Exception raised when user interrupts the agent loop"""
+    pass
 
 
 class AIAssistant:
@@ -83,9 +89,15 @@ class AIAssistant:
                 # Add user message to chat history
                 self.chat_history.append({"role": "user", "content": processed_input})
 
-                # Get AI response with thinking indicator
-                with self.ui.show_thinking():
+                # Get AI response (no thinking indicator here - it's inside get_ai_response)
+                try:
                     response = self.get_ai_response(processed_input)
+                except UserInterruptException:
+                    self.ui.show_info("⚠️  Agent loop interrupted by user. Returning to input.")
+                    # Remove the last user message since we didn't complete the response
+                    if self.chat_history and self.chat_history[-1]["role"] == "user":
+                        self.chat_history.pop()
+                    continue
                 
                 # Add AI response to chat history
                 self.chat_history.append({"role": "assistant", "content": response})
@@ -113,25 +125,31 @@ class AIAssistant:
         self.ui.show_tool_call(tool_call.function.name)
         
         result = None
-        args = eval(tool_call.function.arguments)
+        # Use json.loads instead of eval for safety and proper boolean parsing
+        args = json.loads(tool_call.function.arguments)
         
         if tool_call.function.name == "read_file":
             result = self.file_reader.read_file(**args)
+            # Show only that file was read, not the full content
+            display_result = f"Successfully read file: {args.get('file_path', 'unknown')}"
+            self.ui.show_tool_result(display_result)
         elif tool_call.function.name == "write_file":
             result = self.file_writer.write_file(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "edit_file":
             result = self.file_editor.edit_file(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "insert_line":
             result = self.file_editor.insert_line(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "remove_line":
             result = self.file_editor.remove_line(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "change_line":
             result = self.file_editor.change_line(**args)
+            self.ui.show_tool_result(result)
         elif tool_call.function.name == "list_files":
             result = self.file_lister.list_files(**args)
-
-        # Show tool result
-        if result:
             self.ui.show_tool_result(result)
         
         return result if result else "Operation completed"
@@ -146,41 +164,51 @@ class AIAssistant:
 
         Returns:
             str: AI response text
+            
+        Raises:
+            UserInterruptException: If user presses Ctrl+C during agent loop
         """
         # Keep looping until we get a response without tool calls
         while True:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=self.chat_history,
-                tools=self.tools,
-                tool_choice="auto",
-            )
-            
-            ai_message = response.choices[0].message
-
-            # If no tool calls, we're done - return the text response
-            if not ai_message.tool_calls:
-                return ai_message.content if ai_message.content else "Task completed."
-
-            # Execute all tool calls
-            tool_results = []
-            for tool_call in ai_message.tool_calls:
-                result = self.execute_tool_call(tool_call)
+            try:
+                # Show thinking indicator only during API call
+                with self.ui.show_thinking():
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=self.chat_history,
+                        tools=self.tools,
+                        tool_choice="auto",
+                    )
                 
-                tool_results.append(
-                    {
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": tool_call.function.name,
-                        "content": result,
-                    }
-                )
+                ai_message = response.choices[0].message
 
-            # Add assistant message and tool results to chat history
-            self.chat_history.append(ai_message)
-            self.chat_history.extend(tool_results)
-            
-            # Loop continues - will make another API call with updated history
+                # If no tool calls, we're done - return the text response
+                if not ai_message.tool_calls:
+                    return ai_message.content if ai_message.content else "Task completed."
+
+                # Execute all tool calls (thinking indicator is OFF during tool execution)
+                tool_results = []
+                for tool_call in ai_message.tool_calls:
+                    result = self.execute_tool_call(tool_call)
+                    
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": tool_call.function.name,
+                            "content": result,
+                        }
+                    )
+
+                # Add assistant message and tool results to chat history
+                self.chat_history.append(ai_message)
+                self.chat_history.extend(tool_results)
+                
+                # Loop continues - will make another API call with updated history
+                
+            except KeyboardInterrupt:
+                # User pressed Ctrl+C during the agent loop
+                raise UserInterruptException("User interrupted agent loop")
 
 
 from dotenv import load_dotenv

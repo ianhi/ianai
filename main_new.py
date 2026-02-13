@@ -3,6 +3,7 @@ import os
 from openai import OpenAI
 
 # Import our custom tools
+from file_editing3 import FileEditor
 from file_reader import FileReader
 from file_writer import FileWriter
 from file_inserter import FileInserter
@@ -24,6 +25,7 @@ class AIAssistant:
         self.model = model
 
         # Initialize our tools
+        self.file_editor = FileEditor()
         self.file_reader = FileReader()
         self.file_writer = FileWriter()
         self.file_inserter = FileInserter(self.file_reader)
@@ -32,6 +34,7 @@ class AIAssistant:
         self.tools = []
         # self.tools.append(self.file_reader.get_tools())
         self.tools.append(self.file_writer.get_tools())
+        self.tools.append(self.file_editor.get_tools())
         # self.tools.extend(self.file_inserter.get_tools())
         self.chat_history: list[dict[str, str]] = [
             {
@@ -93,7 +96,6 @@ class AIAssistant:
         Returns:
             str: AI response text
         """
-        print(self.tools)
         # print(dict(self.tools))
         response = self.client.chat.completions.create(
             model=self.model,
@@ -101,6 +103,45 @@ class AIAssistant:
             tools=self.tools,
             tool_choice="auto",
         )
+        ai_message = response.choices[0].message
+
+        if ai_message.tool_calls:
+            # Handle tool calls if any
+            # Execute tools and get results
+            tool_results = []
+            result = None
+            for tool_call in ai_message.tool_calls:
+                print(tool_call)
+                if tool_call.function.name == "write_file":
+                    args = eval(tool_call.function.arguments)
+                    result = self.file_writer.write_file(**args)
+                elif tool_call.function.name == "edit_file":
+                    args = eval(tool_call.function.arguments)
+                    result = self.file_editor.edit_file(**args)
+                if result:
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": tool_call.function.name,
+                            "content": result,
+                        }
+                    )
+
+            # Send tool results back to AI
+            self.chat_history.append(ai_message)
+            self.chat_history.extend(tool_results)
+
+            # Get final response from AI after tool execution
+            final_response = self.client.chat.completions.create(
+                model=self.model,
+                messages=self.chat_history,
+                tools=self.tools,
+                tool_choice="auto",
+            )
+            return final_response.choices[0].message.content
+        else:
+            return ai_message.content
 
         return response.choices[0].message.content
 

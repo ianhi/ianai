@@ -30,7 +30,7 @@ class FileReader:
         Expose available tools for the AI agent.
 
         Returns:
-            list: List of tool dictionaries with name, description, and function.
+            dict: Tool dictionary with proper schema format.
         """
         return {
             "type": "function",
@@ -38,10 +38,14 @@ class FileReader:
                 "name": "read_file",
                 "description": "Read and return the contents of a file",
                 "parameters": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the file to read",
-                    }
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "Path to the file to read",
+                        }
+                    },
+                    "required": ["file_path"],
                 },
             },
         }

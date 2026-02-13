@@ -7,6 +7,7 @@ from file_editing3 import FileEditor
 from file_reader import FileReader
 from file_writer import FileWriter
 from file_inserter import FileInserter
+from file_lister import FileLister
 from UI import AssistantUI
 
 
@@ -32,12 +33,14 @@ class AIAssistant:
         self.file_reader = FileReader()
         self.file_writer = FileWriter()
         self.file_inserter = FileInserter(self.file_reader)
+        self.file_lister = FileLister()
 
         # Collect all tools
         self.tools = []
-        # self.tools.append(self.file_reader.get_tools())
+        self.tools.append(self.file_reader.get_tools())
         self.tools.append(self.file_writer.get_tools())
         self.tools.extend(self.file_editor.get_tools())
+        self.tools.append(self.file_lister.get_tools())
         # self.tools.extend(self.file_inserter.get_tools())
         self.chat_history: list[dict[str, str]] = [
             {
@@ -112,7 +115,9 @@ class AIAssistant:
         result = None
         args = eval(tool_call.function.arguments)
         
-        if tool_call.function.name == "write_file":
+        if tool_call.function.name == "read_file":
+            result = self.file_reader.read_file(**args)
+        elif tool_call.function.name == "write_file":
             result = self.file_writer.write_file(**args)
         elif tool_call.function.name == "edit_file":
             result = self.file_editor.edit_file(**args)
@@ -122,6 +127,8 @@ class AIAssistant:
             result = self.file_editor.remove_line(**args)
         elif tool_call.function.name == "change_line":
             result = self.file_editor.change_line(**args)
+        elif tool_call.function.name == "list_files":
+            result = self.file_lister.list_files(**args)
 
         # Show tool result
         if result:

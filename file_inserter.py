@@ -29,8 +29,8 @@ class FileInserter:
             if file_content.startswith("Error"):
                 return f"Error reading file {file_path}: {file_content}"
 
-            # Format the content with backticks and filename
-            return f"\n```\n{file_content}\n```\n{file_path}"
+            # Format the content with filename label, backticks, and filename at the end
+            return f"{file_path}\n```\n{file_content}\n```\n{file_path}"
 
         # Pattern to match @filename
         pattern = r"@([^\s]+)"

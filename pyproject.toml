@@ -1,11 +1,1 @@
-[project]
-name = "iai"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "openai>=2.2.0",
-    "python-dotenv>=1.0.1",
-    "rich>=14.3.2",
-]
+['project]\nname = "iai"\nversion = "0.1.0"\ndescription = "Add your description here"\nreadme = "README.md"\nrequires-python = ">=3.11"\ndependencies = [\n    "openai>=2.2.0', 'pathspec>=1.0.4', 'python-dotenv>=1.0.1', 'rich>=14.3.2', 'ruff>=0.8.0']

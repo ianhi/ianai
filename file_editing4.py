@@ -1,29 +1,48 @@
 """
-File Editor with Bulk Operations Support
-Modular, composable system for single and bulk file editing.
+Enhanced File Editor with Bulk Operations Support
+Integrates modular line operations with the existing FileEditor interface.
 """
 
 import os
 import difflib
 from typing import List, Dict, Any, Union, Optional
 
+from line_operations import (
+    LineOperation,
+    InsertLineOperation,
+    RemoveLineOperation,
+    ChangeLineOperation,
+    ReplacePatternOperation,
+    LineRange,
+    insert_lines,
+    remove_lines,
+    change_lines,
+    replace_in_lines,
+)
+from bulk_editor import BulkEditor
+
 
 class FileEditor:
+    """
+    Enhanced file editor with support for both single and bulk operations.
+    Maintains backward compatibility with the original interface.
+    """
+
     def __init__(self):
         """Initialize the FileEditor."""
         pass
 
-    def _generate_diff(self, old_content, new_content, file_path):
+    def _generate_diff(self, old_content: str, new_content: str, file_path: str) -> str:
         """
         Generate a unified diff between old and new content.
 
         Args:
-            old_content (str): Original file content
-            new_content (str): New file content
-            file_path (str): Path to the file (for diff header)
+            old_content: Original file content
+            new_content: New file content
+            file_path: Path to the file (for diff header)
 
         Returns:
-            str: Unified diff string
+            Unified diff string
         """
         old_lines = old_content.splitlines(keepends=True)
         new_lines = new_content.splitlines(keepends=True)
@@ -38,17 +57,17 @@ class FileEditor:
 
         return "".join(diff)
 
-    def edit_file(self, file_path, content, mode="w"):
+    def edit_file(self, file_path: str, content: str, mode: str = "w") -> Dict[str, Any]:
         """
         Edit a file at the specified path by writing content to it.
 
         Args:
-            file_path (str): Relative path to the file to edit
-            content (str): Content to write to the file
-            mode (str): File opening mode ('w' for overwrite, 'a' for append)
+            file_path: Relative path to the file to edit
+            content: Content to write to the file
+            mode: File opening mode ('w' for overwrite, 'a' for append)
 
         Returns:
-            dict: Dictionary with 'message', 'diff', and 'success' keys
+            Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
             # Read old content if file exists
@@ -87,15 +106,15 @@ class FileEditor:
                 "success": False,
             }
 
-    def read_file(self, file_path):
+    def read_file(self, file_path: str) -> str:
         """
         Read content from a file at the specified path.
 
         Args:
-            file_path (str): Relative path to the file to read
+            file_path: Relative path to the file to read
 
         Returns:
-            str: File content or error message
+            File content or error message
         """
         try:
             with open(file_path, "r", encoding="utf-8") as file:
@@ -103,30 +122,30 @@ class FileEditor:
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
-    def append_to_file(self, file_path, content):
+    def append_to_file(self, file_path: str, content: str) -> Dict[str, Any]:
         """
         Append content to a file at the specified path.
 
         Args:
-            file_path (str): Relative path to the file to append to
-            content (str): Content to append to the file
+            file_path: Relative path to the file to append to
+            content: Content to append to the file
 
         Returns:
-            dict: Dictionary with 'message', 'diff', and 'success' keys
+            Dictionary with 'message', 'diff', and 'success' keys
         """
         return self.edit_file(file_path, content, mode="a")
 
-    def insert_line(self, file_path, line_number, content):
+    def insert_line(self, file_path: str, line_number: int, content: str) -> Dict[str, Any]:
         """
         Insert a line into a file at the specified line number.
 
         Args:
-            file_path (str): Relative path to the file
-            line_number (int): Line number where to insert (0-indexed)
-            content (str): Content to insert
+            file_path: Relative path to the file
+            line_number: Line number where to insert (0-indexed)
+            content: Content to insert
 
         Returns:
-            dict: Dictionary with 'message', 'diff', and 'success' keys
+            Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
             # Read all lines from the file
@@ -165,16 +184,16 @@ class FileEditor:
                 "success": False,
             }
 
-    def remove_line(self, file_path, line_number):
+    def remove_line(self, file_path: str, line_number: int) -> Dict[str, Any]:
         """
         Remove a line from a file at the specified line number.
 
         Args:
-            file_path (str): Relative path to the file
-            line_number (int): Line number to remove (0-indexed)
+            file_path: Relative path to the file
+            line_number: Line number to remove (0-indexed)
 
         Returns:
-            dict: Dictionary with 'message', 'diff', and 'success' keys
+            Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
             # Read all lines from the file
@@ -215,17 +234,17 @@ class FileEditor:
                 "success": False,
             }
 
-    def change_line(self, file_path, line_number, new_content):
+    def change_line(self, file_path: str, line_number: int, new_content: str) -> Dict[str, Any]:
         """
         Change the content of a specific line in a file.
 
         Args:
-            file_path (str): Relative path to the file
-            line_number (int): Line number to change (0-indexed)
-            new_content (str): New content for the line
+            file_path: Relative path to the file
+            line_number: Line number to change (0-indexed)
+            new_content: New content for the line
 
         Returns:
-            dict: Dictionary with 'message', 'diff', and 'success' keys
+            Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
             # Read all lines from the file
@@ -277,50 +296,17 @@ class FileEditor:
         Args:
             file_path: Relative path to the file
             line_number: Line number where to insert (0-indexed)
-            content: List of lines to insert, or single string (will be split on newlines)
+            content: Single string with newlines or list of lines to insert
 
         Returns:
             Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
-            old_content = self.read_file(file_path)
-            if old_content.startswith("Error"):
-                return {"message": old_content, "diff": "", "success": False}
-
-            lines = old_content.splitlines(keepends=True)
-
-            # Ensure line_number is valid
-            if line_number < 0:
-                line_number = 0
-            elif line_number > len(lines):
-                line_number = len(lines)
-
-            # Prepare content to insert
-            if isinstance(content, str):
-                # Split by newlines if it's a string
-                insert_lines = content.split('\n')
-            else:
-                insert_lines = content
-
-            # Add newlines to each line
-            insert_lines = [line + '\n' if not line.endswith('\n') else line for line in insert_lines]
-
-            # Insert the lines
-            lines[line_number:line_number] = insert_lines
-            new_content = "".join(lines)
-
-            # Write back to file
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(new_content)
-
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content, file_path)
-
-            return {
-                "message": f"Successfully inserted {len(insert_lines)} line(s) at {line_number} in {file_path}",
-                "diff": diff,
-                "success": True,
-            }
+            editor = BulkEditor()
+            editor.load_file(file_path)
+            editor.insert(line_number, content)
+            result = editor.apply()
+            return result
         except Exception as e:
             return {
                 "message": f"Error inserting lines: {str(e)}",
@@ -332,7 +318,7 @@ class FileEditor:
         self, file_path: str, start_line: int, count: int = 1
     ) -> Dict[str, Any]:
         """
-        Remove multiple consecutive lines from a file.
+        Remove multiple lines from a file.
 
         Args:
             file_path: Relative path to the file
@@ -343,39 +329,11 @@ class FileEditor:
             Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
-            old_content = self.read_file(file_path)
-            if old_content.startswith("Error"):
-                return {"message": old_content, "diff": "", "success": False}
-
-            lines = old_content.splitlines(keepends=True)
-
-            # Validate range
-            if start_line < 0 or start_line >= len(lines):
-                return {
-                    "message": f"Error: Start line {start_line} is out of range",
-                    "diff": "",
-                    "success": False,
-                }
-
-            end_line = min(start_line + count, len(lines))
-            actual_count = end_line - start_line
-
-            # Remove the lines
-            del lines[start_line:end_line]
-            new_content = "".join(lines)
-
-            # Write back to file
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(new_content)
-
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content, file_path)
-
-            return {
-                "message": f"Successfully removed {actual_count} line(s) starting at {start_line} in {file_path}",
-                "diff": diff,
-                "success": True,
-            }
+            editor = BulkEditor()
+            editor.load_file(file_path)
+            editor.remove(start_line, count)
+            result = editor.apply()
+            return result
         except Exception as e:
             return {
                 "message": f"Error removing lines: {str(e)}",
@@ -384,7 +342,7 @@ class FileEditor:
             }
 
     def change_lines(
-        self, file_path: str, start_line: int, new_content: Union[str, List[str]], count: Optional[int] = None
+        self, file_path: str, start_line: int, new_content: Union[str, List[str]]
     ) -> Dict[str, Any]:
         """
         Change multiple lines in a file.
@@ -392,58 +350,17 @@ class FileEditor:
         Args:
             file_path: Relative path to the file
             start_line: First line number to change (0-indexed)
-            new_content: New content (list of lines or single string)
-            count: Number of lines to replace (None = same as new_content length)
+            new_content: New content (single string or list of lines)
 
         Returns:
             Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
-            old_content = self.read_file(file_path)
-            if old_content.startswith("Error"):
-                return {"message": old_content, "diff": "", "success": False}
-
-            lines = old_content.splitlines(keepends=True)
-
-            # Validate start_line
-            if start_line < 0 or start_line >= len(lines):
-                return {
-                    "message": f"Error: Start line {start_line} is out of range",
-                    "diff": "",
-                    "success": False,
-                }
-
-            # Prepare new content
-            if isinstance(new_content, str):
-                new_lines = new_content.split('\n')
-            else:
-                new_lines = new_content
-
-            # Add newlines
-            new_lines = [line + '\n' if not line.endswith('\n') else line for line in new_lines]
-
-            # Determine how many lines to replace
-            if count is None:
-                count = len(new_lines)
-
-            end_line = min(start_line + count, len(lines))
-
-            # Replace the lines
-            lines[start_line:end_line] = new_lines
-            new_content_full = "".join(lines)
-
-            # Write back to file
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(new_content_full)
-
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content_full, file_path)
-
-            return {
-                "message": f"Successfully changed {end_line - start_line} line(s) starting at {start_line} in {file_path}",
-                "diff": diff,
-                "success": True,
-            }
+            editor = BulkEditor()
+            editor.load_file(file_path)
+            editor.change(start_line, new_content)
+            result = editor.apply()
+            return result
         except Exception as e:
             return {
                 "message": f"Error changing lines: {str(e)}",
@@ -460,7 +377,7 @@ class FileEditor:
         max_replacements: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Replace text pattern in a file (supports regex).
+        Replace text pattern in a file.
 
         Args:
             file_path: Relative path to the file
@@ -473,35 +390,11 @@ class FileEditor:
             Dictionary with 'message', 'diff', and 'success' keys
         """
         try:
-            old_content = self.read_file(file_path)
-            if old_content.startswith("Error"):
-                return {"message": old_content, "diff": "", "success": False}
-
-            # Perform replacement
-            if regex:
-                import re
-                if max_replacements is not None:
-                    new_content = re.sub(pattern, replacement, old_content, count=max_replacements)
-                else:
-                    new_content = re.sub(pattern, replacement, old_content)
-            else:
-                if max_replacements is not None:
-                    new_content = old_content.replace(pattern, replacement, max_replacements)
-                else:
-                    new_content = old_content.replace(pattern, replacement)
-
-            # Write back to file
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(new_content)
-
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content, file_path)
-
-            return {
-                "message": f"Successfully replaced '{pattern}' with '{replacement}' in {file_path}",
-                "diff": diff,
-                "success": True,
-            }
+            editor = BulkEditor()
+            editor.load_file(file_path)
+            editor.replace(pattern, replacement, regex=regex, max_replacements=max_replacements)
+            result = editor.apply()
+            return result
         except Exception as e:
             return {
                 "message": f"Error replacing text: {str(e)}",
@@ -516,7 +409,7 @@ class FileEditor:
         dry_run: bool = False,
     ) -> Dict[str, Any]:
         """
-        Apply multiple operations to a file at once (more efficient than individual calls).
+        Apply multiple operations to a file at once.
 
         Args:
             file_path: Relative path to the file
@@ -528,111 +421,49 @@ class FileEditor:
 
         Example operations:
             [
-                {"type": "insert", "line_number": 0, "content": "New line"},
+                {"type": "insert", "line_number": 0, "content": "New first line"},
                 {"type": "remove", "line_number": 5, "count": 2},
                 {"type": "change", "line_number": 10, "content": "Changed line"},
                 {"type": "replace", "pattern": "old", "replacement": "new"},
             ]
         """
         try:
-            old_content = self.read_file(file_path)
-            if old_content.startswith("Error"):
-                return {"message": old_content, "diff": "", "success": False}
+            editor = BulkEditor()
+            editor.load_file(file_path)
 
-            lines = old_content.splitlines(keepends=True)
-            
-            # Sort operations: replaces first, then line ops from bottom to top
-            line_ops = []
-            replace_ops = []
-            
-            for op in operations:
-                if op.get('type') == 'replace':
-                    replace_ops.append(op)
-                else:
-                    line_ops.append(op)
-            
-            # Sort line ops by line number (descending) to work bottom-up
-            line_ops.sort(key=lambda x: x.get('line_number', 0), reverse=True)
-            
-            applied_ops = []
-            
-            # Apply line operations bottom-up
-            for op in line_ops:
-                op_type = op.get("type", "").lower()
-                
+            # Parse and add operations
+            for op_dict in operations:
+                op_type = op_dict.get("type", "").lower()
+
                 if op_type == "insert":
-                    line_num = op["line_number"]
-                    content = op["content"]
-                    if isinstance(content, str):
-                        content = [content]
-                    insert_lines = [line + '\n' if not line.endswith('\n') else line for line in content]
-                    lines[line_num:line_num] = insert_lines
-                    applied_ops.append(f"Insert {len(insert_lines)} line(s) at {line_num}")
-                    
+                    editor.insert(
+                        op_dict["line_number"],
+                        op_dict["content"],
+                    )
                 elif op_type == "remove":
-                    line_num = op["line_number"]
-                    count = op.get("count", 1)
-                    end = min(line_num + count, len(lines))
-                    del lines[line_num:end]
-                    applied_ops.append(f"Remove {end - line_num} line(s) at {line_num}")
-                    
+                    editor.remove(
+                        op_dict["line_number"],
+                        op_dict.get("count", 1),
+                    )
                 elif op_type == "change":
-                    line_num = op["line_number"]
-                    content = op["content"]
-                    if isinstance(content, str):
-                        content = [content]
-                    new_lines = [line + '\n' if not line.endswith('\n') else line for line in content]
-                    count = op.get("count", len(new_lines))
-                    end = min(line_num + count, len(lines))
-                    lines[line_num:end] = new_lines
-                    applied_ops.append(f"Change {end - line_num} line(s) at {line_num}")
+                    editor.change(
+                        op_dict["line_number"],
+                        op_dict["content"],
+                    )
+                elif op_type == "replace":
+                    editor.replace(
+                        op_dict["pattern"],
+                        op_dict["replacement"],
+                        regex=op_dict.get("regex", False),
+                        max_replacements=op_dict.get("max_replacements"),
+                    )
                 else:
                     return {
                         "message": f"Unknown operation type: {op_type}",
                         "success": False,
                     }
 
-            new_content = "".join(lines)
-            
-            # Apply replace operations on the full content
-            for op in replace_ops:
-                pattern = op["pattern"]
-                replacement = op["replacement"]
-                regex = op.get("regex", False)
-                max_repl = op.get("max_replacements")
-                
-                if regex:
-                    import re
-                    if max_repl:
-                        new_content = re.sub(pattern, replacement, new_content, count=max_repl)
-                    else:
-                        new_content = re.sub(pattern, replacement, new_content)
-                else:
-                    if max_repl:
-                        new_content = new_content.replace(pattern, replacement, max_repl)
-                    else:
-                        new_content = new_content.replace(pattern, replacement)
-                applied_ops.append(f"Replace '{pattern}' with '{replacement}'")
-
-            # Generate diff
-            diff = self._generate_diff(old_content, new_content, file_path)
-
-            result = {
-                "message": f"Successfully applied {len(applied_ops)} operation(s) to {file_path}",
-                "diff": diff,
-                "success": True,
-                "operations_applied": len(applied_ops),
-                "operations": applied_ops,
-                "dry_run": dry_run,
-            }
-
-            # Write to file if not dry run
-            if not dry_run:
-                with open(file_path, "w", encoding="utf-8") as file:
-                    file.write(new_content)
-            else:
-                result["message"] = f"Dry run: {len(applied_ops)} operation(s) would be applied to {file_path}"
-
+            result = editor.apply(dry_run=dry_run)
             return result
 
         except Exception as e:
@@ -642,12 +473,12 @@ class FileEditor:
                 "success": False,
             }
 
-    def get_tools(self):
+    def get_tools(self) -> List[Dict[str, Any]]:
         """
         Expose available tools for the AI agent.
 
         Returns:
-            list: List of tool definitions
+            List of tool definitions in OpenAI function format
         """
         return [
             {
@@ -718,6 +549,8 @@ class FileEditor:
                                 "description": "Line number where to insert (0-indexed)",
                             },
                             "content": {
+                                "type": "array",
+                                "items": {"type": "string"},
                                 "description": "List of lines to insert, or a single string with newlines",
                             },
                         },
@@ -729,7 +562,7 @@ class FileEditor:
                 "type": "function",
                 "function": {
                     "name": "remove_line",
-                    "description": "Remove a single line from a file",
+                    "description": "Remove a single line from a file at the specified line number",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -814,11 +647,9 @@ class FileEditor:
                                 "description": "First line number to change (0-indexed)",
                             },
                             "new_content": {
+                                "type": "array",
+                                "items": {"type": "string"},
                                 "description": "New content (list of lines or single string)",
-                            },
-                            "count": {
-                                "type": "integer",
-                                "description": "Number of lines to replace (optional)",
                             },
                         },
                         "required": ["file_path", "start_line", "new_content"],
@@ -863,7 +694,7 @@ class FileEditor:
                 "type": "function",
                 "function": {
                     "name": "bulk_edit",
-                    "description": "Apply multiple editing operations to a file efficiently in one pass",
+                    "description": "Apply multiple editing operations to a file at once for efficiency",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -876,6 +707,32 @@ class FileEditor:
                                 "description": "List of operations to apply",
                                 "items": {
                                     "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["insert", "remove", "change", "replace"],
+                                            "description": "Type of operation",
+                                        },
+                                        "line_number": {
+                                            "type": "integer",
+                                            "description": "Line number (for insert, remove, change)",
+                                        },
+                                        "content": {
+                                            "description": "Content (for insert, change)",
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "description": "Number of lines (for remove)",
+                                        },
+                                        "pattern": {
+                                            "type": "string",
+                                            "description": "Pattern to find (for replace)",
+                                        },
+                                        "replacement": {
+                                            "type": "string",
+                                            "description": "Replacement text (for replace)",
+                                        },
+                                    },
                                 },
                             },
                             "dry_run": {
@@ -889,3 +746,44 @@ class FileEditor:
                 },
             },
         ]
+
+
+# Example usage
+if __name__ == "__main__":
+    editor = FileEditor()
+
+    # Create a test file
+    print("=== Creating test file ===")
+    result = editor.edit_file("test_bulk.txt", "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n")
+    print(result["message"])
+
+    # Test insert_lines
+    print("\n=== Inserting multiple lines ===")
+    result = editor.insert_lines("test_bulk.txt", 2, ["Inserted A", "Inserted B", "Inserted C"])
+    print(result["message"])
+    if result.get("diff"):
+        print("Diff:", result["diff"])
+
+    # Test remove_lines
+    print("\n=== Removing multiple lines ===")
+    result = editor.remove_lines("test_bulk.txt", 3, count=2)
+    print(result["message"])
+    if result.get("diff"):
+        print("Diff:", result["diff"])
+
+    # Test bulk_edit
+    print("\n=== Bulk edit with multiple operations ===")
+    operations = [
+        {"type": "insert", "line_number": 0, "content": "=== Header ==="},
+        {"type": "replace", "pattern": "Line", "replacement": "Row"},
+        {"type": "insert", "line_number": 100, "content": "=== Footer ==="},  # Will insert at end
+    ]
+    result = editor.bulk_edit("test_bulk.txt", operations)
+    print(result["message"])
+    if result.get("diff"):
+        print("Diff:", result["diff"])
+
+    # Show final content
+    print("\n=== Final content ===")
+    content = editor.read_file("test_bulk.txt")
+    print(content)

@@ -10,7 +10,8 @@ from file_inserter import FileInserter
 
 
 class AIAssistant:
-    def __init__(self, api_key=None, model="qwen/qwen3-coder-flash"):
+    def __init__(self, api_key=None, model="anthropic/claude-sonnet-4.5"):
+        # model="qwen/qwen3-coder-flash"):
         """
         Initialize the AI Assistant.
 
@@ -34,7 +35,7 @@ class AIAssistant:
         self.tools = []
         # self.tools.append(self.file_reader.get_tools())
         self.tools.append(self.file_writer.get_tools())
-        self.tools.append(self.file_editor.get_tools())
+        self.tools.extend(self.file_editor.get_tools())
         # self.tools.extend(self.file_inserter.get_tools())
         self.chat_history: list[dict[str, str]] = [
             {
@@ -111,13 +112,23 @@ class AIAssistant:
             tool_results = []
             result = None
             for tool_call in ai_message.tool_calls:
-                print(tool_call)
+                print(tool_call.function.name)
                 if tool_call.function.name == "write_file":
                     args = eval(tool_call.function.arguments)
                     result = self.file_writer.write_file(**args)
                 elif tool_call.function.name == "edit_file":
                     args = eval(tool_call.function.arguments)
                     result = self.file_editor.edit_file(**args)
+                elif tool_call.function.name == "insert_line":  # ADD THIS
+                    args = eval(tool_call.function.arguments)
+                    result = self.file_editor.insert_line(**args)
+                elif tool_call.function.name == "remove_line":  # ADD THIS
+                    args = eval(tool_call.function.arguments)
+                    result = self.file_editor.remove_line(**args)
+                elif tool_call.function.name == "change_line":  # ADD THIS
+                    args = eval(tool_call.function.arguments)
+                    result = self.file_editor.change_line(**args)
+
                 if result:
                     tool_results.append(
                         {

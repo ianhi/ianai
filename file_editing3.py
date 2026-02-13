@@ -62,85 +62,85 @@ class FileEditor:
     def insert_line(self, file_path, line_number, content):
         """
         Insert a line into a file at the specified line number.
-        
+
         Args:
             file_path (str): Relative path to the file
             line_number (int): Line number where to insert (0-indexed)
             content (str): Content to insert
-            
+
         Returns:
             str: Success message or error message
         """
         try:
             # Read all lines from the file
             lines = self.read_file(file_path).splitlines(keepends=True)
-            
+
             # Ensure line_number is valid
             if line_number < 0:
                 line_number = 0
             elif line_number > len(lines):
                 line_number = len(lines)
-                
+
             # Insert the line
-            lines.insert(line_number, content + '\n')
-            
+            lines.insert(line_number, content + "\n")
+
             # Write back to file
-            return self.edit_file(file_path, ''.join(lines))
+            return self.edit_file(file_path, "".join(lines))
         except Exception as e:
             return f"Error inserting line: {str(e)}"
 
     def remove_line(self, file_path, line_number):
         """
         Remove a line from a file at the specified line number.
-        
+
         Args:
             file_path (str): Relative path to the file
             line_number (int): Line number to remove (0-indexed)
-            
+
         Returns:
             str: Success message or error message
         """
         try:
             # Read all lines from the file
             lines = self.read_file(file_path).splitlines(keepends=True)
-            
+
             # Check if line_number is valid
             if line_number < 0 or line_number >= len(lines):
                 return f"Error: Line number {line_number} is out of range"
-                
+
             # Remove the line
             lines.pop(line_number)
-            
+
             # Write back to file
-            return self.edit_file(file_path, ''.join(lines))
+            return self.edit_file(file_path, "".join(lines))
         except Exception as e:
             return f"Error removing line: {str(e)}"
 
     def change_line(self, file_path, line_number, new_content):
         """
         Change the content of a specific line in a file.
-        
+
         Args:
             file_path (str): Relative path to the file
             line_number (int): Line number to change (0-indexed)
             new_content (str): New content for the line
-            
+
         Returns:
             str: Success message or error message
         """
         try:
             # Read all lines from the file
             lines = self.read_file(file_path).splitlines(keepends=True)
-            
+
             # Check if line_number is valid
             if line_number < 0 or line_number >= len(lines):
                 return f"Error: Line number {line_number} is out of range"
-                
+
             # Change the line
-            lines[line_number] = new_content + '\n'
-            
+            lines[line_number] = new_content + "\n"
+
             # Write back to file
-            return self.edit_file(file_path, ''.join(lines))
+            return self.edit_file(file_path, "".join(lines))
         except Exception as e:
             return f"Error changing line: {str(e)}"
 
@@ -151,14 +151,15 @@ class FileEditor:
         Returns:
             dict: Dictionary with tool definitions
         """
-        return {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "edit_file",
-                        "description": "Edit a file at the specified path by writing content to it",
-                        "parameters": {
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "edit_file",
+                    "description": "Edit a file at the specified path by writing content to it",
+                    "parameters": {
+                        "type": "object",  # ADD THIS
+                        "properties": {  # CHANGE: wrap parameters in "properties"
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file to edit",
@@ -173,14 +174,18 @@ class FileEditor:
                                 "default": "w",
                             },
                         },
+                        "required": ["file_path", "content"],  # ADD THIS
                     },
                 },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "insert_line",
-                        "description": "Insert a line into a file at the specified line number",
-                        "parameters": {
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "insert_line",
+                    "description": "Insert a line into a file at the specified line number",
+                    "parameters": {
+                        "type": "object",  # ADD THIS
+                        "properties": {  # CHANGE: wrap parameters in "properties"
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -194,14 +199,18 @@ class FileEditor:
                                 "description": "Content to insert",
                             },
                         },
+                        "required": ["file_path", "line_number", "content"],  # ADD THIS
                     },
                 },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "remove_line",
-                        "description": "Remove a line from a file at the specified line number",
-                        "parameters": {
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "remove_line",
+                    "description": "Remove a line from a file at the specified line number",
+                    "parameters": {
+                        "type": "object",  # ADD THIS
+                        "properties": {  # CHANGE: wrap parameters in "properties"
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -211,14 +220,18 @@ class FileEditor:
                                 "description": "Line number to remove (0-indexed)",
                             },
                         },
+                        "required": ["file_path", "line_number"],  # ADD THIS
                     },
                 },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "change_line",
-                        "description": "Change the content of a specific line in a file",
-                        "parameters": {
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "change_line",
+                    "description": "Change the content of a specific line in a file",
+                    "parameters": {
+                        "type": "object",  # ADD THIS
+                        "properties": {  # CHANGE: wrap parameters in "properties"
                             "file_path": {
                                 "type": "string",
                                 "description": "Relative path to the file",
@@ -232,10 +245,15 @@ class FileEditor:
                                 "description": "New content for the line",
                             },
                         },
+                        "required": [
+                            "file_path",
+                            "line_number",
+                            "new_content",
+                        ],  # ADD THIS
                     },
-                }
-            ]
-        }
+                },
+            },
+        ]
 
 
 # Example usage
@@ -253,7 +271,7 @@ if __name__ == "__main__":
     # Insert a line at position 2
     result = editor.insert_line("example.txt", 2, "Inserted line")
     print(result)
-    
+
     # Show content after insertion
     content = editor.read_file("example.txt")
     print(f"After insertion:\n{content}")
@@ -273,3 +291,4 @@ if __name__ == "__main__":
     # Show final content
     content = editor.read_file("example.txt")
     print(f"Final content:\n{content}")
+

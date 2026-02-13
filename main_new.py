@@ -96,9 +96,43 @@ class AIAssistant:
             except Exception as e:
                 self.ui.show_error(str(e))
 
+    def execute_tool_call(self, tool_call):
+        """
+        Execute a single tool call and return the result.
+        
+        Args:
+            tool_call: The tool call object from the API response
+            
+        Returns:
+            str: Result message from the tool execution
+        """
+        # Show which tool is being called
+        self.ui.show_tool_call(tool_call.function.name)
+        
+        result = None
+        args = eval(tool_call.function.arguments)
+        
+        if tool_call.function.name == "write_file":
+            result = self.file_writer.write_file(**args)
+        elif tool_call.function.name == "edit_file":
+            result = self.file_editor.edit_file(**args)
+        elif tool_call.function.name == "insert_line":
+            result = self.file_editor.insert_line(**args)
+        elif tool_call.function.name == "remove_line":
+            result = self.file_editor.remove_line(**args)
+        elif tool_call.function.name == "change_line":
+            result = self.file_editor.change_line(**args)
+
+        # Show tool result
+        if result:
+            self.ui.show_tool_result(result)
+        
+        return result if result else "Operation completed"
+
     def get_ai_response(self, prompt):
         """
         Get response from OpenRouter AI model.
+        Continues in a loop executing tools until AI provides a final text response.
 
         Args:
             prompt (str): Prompt to send to the AI
@@ -106,68 +140,40 @@ class AIAssistant:
         Returns:
             str: AI response text
         """
-        # print(dict(self.tools))
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=self.chat_history,
-            tools=self.tools,
-            tool_choice="auto",
-        )
-        ai_message = response.choices[0].message
-
-        if ai_message.tool_calls:
-            # Handle tool calls if any
-            # Execute tools and get results
-            tool_results = []
-            result = None
-            for tool_call in ai_message.tool_calls:
-                # Show which tool is being called
-                self.ui.show_tool_call(tool_call.function.name)
-                
-                if tool_call.function.name == "write_file":
-                    args = eval(tool_call.function.arguments)
-                    result = self.file_writer.write_file(**args)
-                elif tool_call.function.name == "edit_file":
-                    args = eval(tool_call.function.arguments)
-                    result = self.file_editor.edit_file(**args)
-                elif tool_call.function.name == "insert_line":  # ADD THIS
-                    args = eval(tool_call.function.arguments)
-                    result = self.file_editor.insert_line(**args)
-                elif tool_call.function.name == "remove_line":  # ADD THIS
-                    args = eval(tool_call.function.arguments)
-                    result = self.file_editor.remove_line(**args)
-                elif tool_call.function.name == "change_line":  # ADD THIS
-                    args = eval(tool_call.function.arguments)
-                    result = self.file_editor.change_line(**args)
-
-                if result:
-                    # Show tool result
-                    self.ui.show_tool_result(result)
-                    tool_results.append(
-                        {
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": tool_call.function.name,
-                            "content": result,
-                        }
-                    )
-
-            # Send tool results back to AI
-            self.chat_history.append(ai_message)
-            self.chat_history.extend(tool_results)
-
-            # Get final response from AI after tool execution
-            final_response = self.client.chat.completions.create(
+        # Keep looping until we get a response without tool calls
+        while True:
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.chat_history,
                 tools=self.tools,
                 tool_choice="auto",
             )
-            return final_response.choices[0].message.content
-        else:
-            return ai_message.content
+            
+            ai_message = response.choices[0].message
 
-        return response.choices[0].message.content
+            # If no tool calls, we're done - return the text response
+            if not ai_message.tool_calls:
+                return ai_message.content if ai_message.content else "Task completed."
+
+            # Execute all tool calls
+            tool_results = []
+            for tool_call in ai_message.tool_calls:
+                result = self.execute_tool_call(tool_call)
+                
+                tool_results.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": tool_call.function.name,
+                        "content": result,
+                    }
+                )
+
+            # Add assistant message and tool results to chat history
+            self.chat_history.append(ai_message)
+            self.chat_history.extend(tool_results)
+            
+            # Loop continues - will make another API call with updated history
 
 
 from dotenv import load_dotenv

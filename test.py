@@ -3,3 +3,4 @@
 # Purpose: Demonstration
 
 print("Hello, World!")
+print("Testing multiple tool calls!")

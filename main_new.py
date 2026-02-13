@@ -8,6 +8,7 @@ from file_editing3 import FileEditor
 from file_reader import FileReader
 from file_writer import FileWriter
 from file_inserter import FileInserter
+from file_deleter import FileDeleter
 from file_lister import FileLister
 from UI import AssistantUI
 
@@ -22,6 +23,8 @@ class AIAssistant:
     # Available models
     AVAILABLE_MODELS = [
         "anthropic/claude-sonnet-4.5",
+        "qwen/qwen3-coder-plus",
+        "qwen/qwen3-coder",
         "qwen/qwen3-coder-flash",
         "anthropic/claude-haiku-4.5",
     ]
@@ -44,14 +47,14 @@ class AIAssistant:
         # Initialize our tools
         self.file_editor = FileEditor()
         self.file_reader = FileReader()
-        self.file_writer = FileWriter()
+        self.file_deleter = FileDeleter()
         self.file_inserter = FileInserter(self.file_reader)
         self.file_lister = FileLister()
 
         # Collect all tools
         self.tools = []
         self.tools.append(self.file_reader.get_tools())
-        self.tools.append(self.file_writer.get_tools())
+        self.tools.extend(self.file_deleter.get_tools())
         self.tools.extend(self.file_editor.get_tools())
         self.tools.append(self.file_lister.get_tools())
         # self.tools.extend(self.file_inserter.get_tools())
@@ -60,14 +63,16 @@ class AIAssistant:
                 "role": "system",
                 "content": """You are a helpful AI assistant that can read and write files.
 
-When working with files, be efficient and selective:
-- Use list_files to explore directory structure before reading specific files
-- Only read files that are directly relevant to the user's request
-- Avoid reading multiple files when one or two will suffice to answer the question
-- When listing files, use patterns to filter results and avoid overwhelming output
-- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
-- Ask yourself: "Do I really need to read this file to answer the user's question?"
-""",
+                Always make a plan before starting to edit files.
+
+                When working with files, be efficient and selective:
+                - Use list_files to explore directory structure before reading specific files
+                - Only read files that are directly relevant to the user's request
+                - Avoid reading multiple files when one or two will suffice to answer the question
+                - When listing files, use patterns to filter results and avoid overwhelming output
+                - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+                - Ask yourself: "Do I really need to read this file to answer the user's question?"
+                """,
             }
         ]
 
@@ -83,14 +88,16 @@ When working with files, be efficient and selective:
                         "role": "system",
                         "content": """You are a helpful AI assistant that can read and write files.
 
-When working with files, be efficient and selective:
-- Use list_files to explore directory structure before reading specific files
-- Only read files that are directly relevant to the user's request
-- Avoid reading multiple files when one or two will suffice to answer the question
-- When listing files, use patterns to filter results and avoid overwhelming output
-- Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
-- Ask yourself: "Do I really need to read this file to answer the user's question?"
-""",
+                        Always make a plan before starting to edit files.
+
+                        When working with files, be efficient and selective:
+                        - Use list_files to explore directory structure before reading specific files
+                        - Only read files that are directly relevant to the user's request
+                        - Avoid reading multiple files when one or two will suffice to answer the question
+                        - When listing files, use patterns to filter results and avoid overwhelming output
+                        - Focus on quality over quantity - reading fewer, more relevant files is better than reading everything
+                        - Ask yourself: "Do I really need to read this file to answer the user's question?"
+                        """,
                     }
                 ]
                 self.ui.show_info(f"✓ Switched to model: {self.model}")
@@ -298,3 +305,4 @@ from dotenv import load_dotenv
 load_dotenv()
 agent = AIAssistant()
 agent.run_loop()
+
